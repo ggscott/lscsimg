@@ -134,6 +134,7 @@ def draw_crossfade_text(draw, x, y, oldText, newText, baseColor, progress, font)
 
         currentX += charWidth
 
+@app.post("/")
 @app.post("/render")
 async def render(request: Request, payload: RenderRequest):
     data = payload.data or {}
