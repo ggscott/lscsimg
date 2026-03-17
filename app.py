@@ -28,23 +28,52 @@ ACCENT_YELLOW = (248, 231, 28)
 ACCENT_RED = (255, 59, 48)
 BORDER_COLOR = (60, 70, 80)
 
-# Try to load a font, fallback to default if not found
-try:
-    FONT_LARGE = ImageFont.truetype("DejaVuSansMono-Bold.ttf", 48)
-    FONT_ERROR = ImageFont.truetype("DejaVuSansMono-Bold.ttf", 40)
-    FONT_SUB = ImageFont.truetype("DejaVuSansMono.ttf", 24)
-    FONT_LABEL = ImageFont.truetype("DejaVuSansMono-Bold.ttf", 18)
-    FONT_VAL = ImageFont.truetype("DejaVuSansMono-Bold.ttf", 36)
-    FONT_TBL_HDR = ImageFont.truetype("DejaVuSansMono-Bold.ttf", 20)
-    FONT_ROW = ImageFont.truetype("DejaVuSansMono.ttf", 20)
-except IOError:
-    FONT_LARGE = ImageFont.load_default()
-    FONT_ERROR = ImageFont.load_default()
-    FONT_SUB = ImageFont.load_default()
-    FONT_LABEL = ImageFont.load_default()
-    FONT_VAL = ImageFont.load_default()
-    FONT_TBL_HDR = ImageFont.load_default()
-    FONT_ROW = ImageFont.load_default()
+import urllib.request
+
+font_paths = [
+    "DejaVuSansMono-Bold.ttf",
+    "DejaVuSansMono.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeMonoBold.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
+]
+
+def load_font(size, bold=False):
+    # Try to find a local font first
+    for path in font_paths:
+        if ("Bold" in path and bold) or ("Bold" not in path and not bold):
+            try:
+                return ImageFont.truetype(path, size)
+            except IOError:
+                pass
+
+    # If no local font found, download a reliable one (Roboto Mono)
+    font_url = "https://github.com/googlefonts/RobotoMono/raw/main/fonts/ttf/RobotoMono-Bold.ttf" if bold else "https://github.com/googlefonts/RobotoMono/raw/main/fonts/ttf/RobotoMono-Regular.ttf"
+    font_filename = "RobotoMono-Bold.ttf" if bold else "RobotoMono-Regular.ttf"
+
+    if not os.path.exists(font_filename):
+        try:
+            print(f"Downloading fallback font {font_filename}...")
+            urllib.request.urlretrieve(font_url, font_filename)
+        except Exception as e:
+            print(f"Failed to download font: {e}")
+            return ImageFont.load_default()
+
+    try:
+        return ImageFont.truetype(font_filename, size)
+    except IOError:
+        return ImageFont.load_default()
+
+FONT_LARGE = load_font(48, bold=True)
+FONT_ERROR = load_font(40, bold=True)
+FONT_SUB = load_font(24, bold=False)
+FONT_LABEL = load_font(18, bold=True)
+FONT_VAL = load_font(36, bold=True)
+FONT_TBL_HDR = load_font(20, bold=True)
+FONT_ROW = load_font(20, bold=False)
 
 class RenderRequest(BaseModel):
     data: Optional[Dict[str, Any]] = None
