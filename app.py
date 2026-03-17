@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 import math
 from urllib.parse import urlparse
 import re
+import urllib.request
 
 app = FastAPI()
 
@@ -28,8 +29,6 @@ ACCENT_YELLOW = (248, 231, 28)
 ACCENT_RED = (255, 59, 48)
 BORDER_COLOR = (60, 70, 80)
 
-import urllib.request
-
 font_paths = [
     "DejaVuSansMono-Bold.ttf",
     "DejaVuSansMono.ttf",
@@ -42,7 +41,6 @@ font_paths = [
 ]
 
 def load_font(size, bold=False):
-    # Try to find a local font first
     for path in font_paths:
         if ("Bold" in path and bold) or ("Bold" not in path and not bold):
             try:
@@ -50,16 +48,13 @@ def load_font(size, bold=False):
             except IOError:
                 pass
 
-    # If no local font found, download a reliable one (Roboto Mono)
     font_url = "https://github.com/googlefonts/RobotoMono/raw/main/fonts/ttf/RobotoMono-Bold.ttf" if bold else "https://github.com/googlefonts/RobotoMono/raw/main/fonts/ttf/RobotoMono-Regular.ttf"
     font_filename = "RobotoMono-Bold.ttf" if bold else "RobotoMono-Regular.ttf"
 
     if not os.path.exists(font_filename):
         try:
-            print(f"Downloading fallback font {font_filename}...")
             urllib.request.urlretrieve(font_url, font_filename)
-        except Exception as e:
-            print(f"Failed to download font: {e}")
+        except Exception:
             return ImageFont.load_default()
 
     try:
@@ -79,8 +74,6 @@ class RenderRequest(BaseModel):
     data: Optional[Dict[str, Any]] = None
     previousData: Optional[Dict[str, Any]] = None
     regionName: str = "Unknown Region"
-    type: str = "sim"
-    primsHistory: Optional[List[int]] = None
     type: str = "sim" # "sim" or "zone"
     primsHistory: Optional[List[int]] = None
 
@@ -89,8 +82,6 @@ class RenderableUser:
         self.json = json_data
         self.uuid = json_data.get("uuid", "")
         self.nameToDisplay = json_data.get("name", "Unknown")
-        self.category = 2
-
         self.category = json_data.get("category", 2)
         self.isOOC = json_data.get("isOOC", False)
         self.isChar = json_data.get("isChar", False)
@@ -131,29 +122,456 @@ class RenderableZone:
         self.json = json_data
         self.uuid = json_data.get("uuid", "")
         self.nameToDisplay = json_data.get("name", "Unknown Zone")
-
         self.isDynamic = json_data.get("isDynamic", False)
-
         self.rezStatus = json_data.get("rezStatus", "Not deployed")
         self.rezStatusText = self.rezStatus
-
         self.liEstText = json_data.get("liEstText", "-")
-
         self.prevRezStatusText = self.rezStatusText
         self.prevLiEstText = self.liEstText
-
         self.prevIndex = -1
         self.targetIndex = -1
-
         self.isNew = False
         self.isRemoved = False
-
         self.rezStatusChanged = False
         self.liEstChanged = False
 
-def render_zone(data, prev_data, regionName, history, frames_count):
-    if payload.type == 'zone':
-        images = render_zone(data, prev_data, regionName, payload.primsHistory)
+def draw_crossfade_text(draw, x, y, oldText, newText, baseColor, progress, font):
+    if not oldText or not newText or oldText == newText:
+        draw.text((x, y), newText or "", font=font, fill=baseColor)
+        return
+
+    currentX = x
+    max_len = max(len(oldText), len(newText))
+
+    for i in range(max_len):
+        oldC = oldText[i] if i < len(oldText) else ' '
+        newC = newText[i] if i < len(newText) else ' '
+
+        char_to_measure = newC if newC != ' ' else oldC
+        try:
+            charWidth = draw.textlength(char_to_measure, font=font)
+        except AttributeError:
+            charWidth = font.getsize(char_to_measure)[0]
+
+        if oldC == newC:
+            draw.text((currentX, y), newC, font=font, fill=baseColor)
+        else:
+            if oldC != ' ':
+                old_fill = (baseColor[0], baseColor[1], baseColor[2], int(255 * (1.0 - progress)))
+                draw.text((currentX, y), oldC, font=font, fill=old_fill)
+            if newC != ' ':
+                r = int(ACCENT_CYAN[0] + (baseColor[0] - ACCENT_CYAN[0]) * progress)
+                g = int(ACCENT_CYAN[1] + (baseColor[1] - ACCENT_CYAN[1]) * progress)
+                b = int(ACCENT_CYAN[2] + (baseColor[2] - ACCENT_CYAN[2]) * progress)
+                new_fill = (r, g, b, int(255 * progress))
+                draw.text((currentX, y), newC, font=font, fill=new_fill)
+
+        currentX += charWidth
+
+def render_sim(data, prev_data, regionName):
+    prevList = []
+    if prev_data and "users" in prev_data:
+        for u in prev_data["users"]:
+            prevList.append(RenderableUser(u, True))
+        prevList.sort(key=lambda u: (u.category, u.nameToDisplay.lower()))
+        for i, u in enumerate(prevList):
+            u.prevIndex = i
+
+    currentList = []
+    if data and "users" in data:
+        for u in data["users"]:
+            currentList.append(RenderableUser(u, False))
+        currentList.sort(key=lambda u: (u.category, u.nameToDisplay.lower()))
+        for i, u in enumerate(currentList):
+            u.targetIndex = i
+
+    renderList = []
+    for cu in currentList:
+        pu = next((p for p in prevList if (p.uuid == cu.uuid and p.uuid) or (not p.uuid and p.nameToDisplay == cu.nameToDisplay)), None)
+        if pu:
+            cu.prevIndex = pu.prevIndex
+            cu.prevScriptsText = pu.scriptsText
+            cu.prevTimeText = pu.timeText
+            cu.prevMemoryText = pu.memoryText
+            cu.prevComplexityText = pu.complexityText
+
+            cu.scriptsChanged = cu.scriptsText != pu.scriptsText
+            cu.timeChanged = cu.timeText != pu.timeText
+            cu.memoryChanged = cu.memoryText != pu.memoryText
+            cu.complexityChanged = cu.complexityText != pu.complexityText
+        else:
+            cu.isNew = True
+            cu.prevIndex = cu.targetIndex
+        renderList.append(cu)
+
+    for pu in prevList:
+        found = any((cu.uuid == pu.uuid and pu.uuid) or (not pu.uuid and cu.nameToDisplay == pu.nameToDisplay) for cu in currentList)
+        if not found:
+            pu.isRemoved = True
+            pu.targetIndex = pu.prevIndex
+            renderList.append(pu)
+
+    anyChanges = any(ru.isNew or ru.isRemoved or ru.scriptsChanged or ru.timeChanged or ru.memoryChanged or ru.complexityChanged or ru.prevIndex != ru.targetIndex for ru in renderList)
+
+    frames = 32 if anyChanges else 1
+
+    images = []
+
+    for f in range(frames):
+        img = Image.new('RGBA', (WIDTH, HEIGHT), BG_COLOR)
+        draw = ImageDraw.Draw(img)
+
+        if not data and not prev_data:
+            msg = f"NO DATA AVAILABLE FOR {regionName.upper()}"
+            try:
+                tw = draw.textlength(msg, font=FONT_ERROR)
+            except AttributeError:
+                tw = FONT_ERROR.getsize(msg)[0]
+            x = (WIDTH - tw) // 2
+            y = HEIGHT // 2
+            draw.text((x, y), msg, font=FONT_ERROR, fill=ACCENT_RED)
+        else:
+            d = data if data else prev_data
+
+            agents = d.get("agents", 0)
+            fps = d.get("fps", 0.0)
+            dilation = d.get("dilation", 0.0)
+            lag = d.get("lag", 0)
+
+            margin = 50
+            headerY = 80
+            statsY = 140
+            tableHeaderY = 220
+            rowHeight = 40
+            rowStartY = 270
+
+            draw.text((margin, headerY - 48), regionName.upper(), font=FONT_LARGE, fill=ACCENT_CYAN)
+            draw.line([(margin, headerY + 15), (WIDTH - margin, headerY + 15)], fill=ACCENT_CYAN, width=2)
+
+            labels = ["ROLEPLAYERS", "FPS", "TIME DILATION", "LAG"]
+            values = [
+                str(agents),
+                f"{fps:.1f}",
+                f"{dilation:.2f}",
+                f"{lag} %"
+            ]
+
+            colWidth = (WIDTH - 2 * margin) // 4
+
+            for i in range(4):
+                x = margin + (i * colWidth)
+                draw.text((x, statsY), labels[i], font=FONT_LABEL, fill=ACCENT_YELLOW)
+
+                v_col = TEXT_MAIN
+                if i == 3 and lag > 10: v_col = ACCENT_RED
+                draw.text((x, statsY + 30), values[i], font=FONT_VAL, fill=v_col)
+
+            draw.line([(margin, statsY + 80), (WIDTH - margin, statsY + 80)], fill=BORDER_COLOR, width=1)
+
+            cols = [50, 450, 650, 770, 890]
+            tableHeaders = ["USER", "SCRIPTS (T/A)", "TIME", "MEMORY", "CMPLX"]
+
+            for i in range(len(tableHeaders)):
+                draw.text((cols[i], tableHeaderY), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
+
+            draw.line([(margin, tableHeaderY + 30), (WIDTH - margin, tableHeaderY + 30)], fill=ACCENT_CYAN, width=1)
+
+            if renderList:
+                globalProgress = f / (frames - 1) if frames > 1 else 1.0
+                slideProgress = min(1.0, f / 16.0) if frames > 1 else 1.0
+                slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
+
+                pulseProgress = 0.0
+                if frames > 1 and f >= 16:
+                    pulsePhase = (f - 16) / 15.0
+                    pulseProgress = math.sin(pulsePhase * math.pi)
+
+                for rUser in renderList:
+                    prevY = rowStartY + rUser.prevIndex * rowHeight
+                    targetY = rowStartY + rUser.targetIndex * rowHeight
+                    currentY = int(prevY + (targetY - prevY) * slideProgress)
+
+                    if currentY > HEIGHT - 20 and prevY > HEIGHT - 20: continue
+
+                    alpha = 255
+                    if rUser.isNew:
+                        alpha = int(255 * min(1.0, max(0.0, slideProgress)))
+                        if pulseProgress > 0:
+                            box_alpha = int(60 * pulseProgress)
+                            box_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], box_alpha)
+                            draw.rectangle([margin - 10, currentY - 5, WIDTH - margin + 10, currentY + rowHeight - 5], fill=box_fill)
+                            outline_alpha = int(180 * pulseProgress)
+                            outline_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], outline_alpha)
+                            draw.rectangle([margin - 10, currentY - 5, WIDTH - margin + 10, currentY + rowHeight - 5], outline=outline_fill)
+                    elif rUser.isRemoved:
+                        alpha = int(255 * min(1.0, max(0.0, 1.0 - slideProgress)))
+
+                    name = rUser.nameToDisplay
+                    currentX = cols[0]
+
+                    row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+                    row_draw = ImageDraw.Draw(row_img)
+
+                    if rUser.isOOC:
+                        row_draw.text((currentX, currentY), "OOC:", font=FONT_ROW, fill=ACCENT_ORANGE)
+                        try:
+                            tw = row_draw.textlength("OOC:", font=FONT_ROW)
+                        except AttributeError:
+                            tw = FONT_ROW.getsize("OOC:")[0]
+                        currentX += int(tw)
+                        if len(name) > 21: name = name[:21] + "..."
+                        row_draw.text((currentX, currentY), name, font=FONT_ROW, fill=TEXT_MAIN)
+                    elif rUser.isChar:
+                        row_draw.text((currentX, currentY), "<<", font=FONT_ROW, fill=ACCENT_GREEN)
+                        try:
+                            tw = row_draw.textlength("<<", font=FONT_ROW)
+                        except AttributeError:
+                            tw = FONT_ROW.getsize("<<")[0]
+                        currentX += int(tw)
+                        if len(name) > 21: name = name[:21] + "..."
+                        row_draw.text((currentX, currentY), name, font=FONT_ROW, fill=TEXT_MAIN)
+                        try:
+                            tw2 = row_draw.textlength(name, font=FONT_ROW)
+                        except AttributeError:
+                            tw2 = FONT_ROW.getsize(name)[0]
+                        currentX += int(tw2)
+                        row_draw.text((currentX, currentY), ">>", font=FONT_ROW, fill=ACCENT_GREEN)
+                    else:
+                        if len(name) > 25: name = name[:25] + "..."
+                        row_draw.text((currentX, currentY), name, font=FONT_ROW, fill=TEXT_MAIN)
+
+                    draw_crossfade_text(row_draw, cols[1], currentY, rUser.prevScriptsText, rUser.scriptsText, TEXT_MAIN, globalProgress, FONT_ROW)
+
+                    time_color = TEXT_MAIN
+                    try:
+                        t = float(rUser.json.get("time", 0))
+                        if t > 5: time_color = ACCENT_RED
+                        elif t > 1: time_color = ACCENT_YELLOW
+                    except: pass
+
+                    draw_crossfade_text(row_draw, cols[2], currentY, rUser.prevTimeText, rUser.timeText, time_color, globalProgress, FONT_ROW)
+                    draw_crossfade_text(row_draw, cols[3], currentY, rUser.prevMemoryText, rUser.memoryText, TEXT_MAIN, globalProgress, FONT_ROW)
+                    draw_crossfade_text(row_draw, cols[4], currentY, rUser.prevComplexityText, rUser.complexityText, TEXT_MAIN, globalProgress, FONT_ROW)
+
+                    row_draw.line([(margin, currentY + rowHeight - 5), (WIDTH - margin, currentY + rowHeight - 5)], fill=(40, 50, 60), width=1)
+
+                    if alpha < 255:
+                        row_img.putalpha(row_img.split()[3].point(lambda p: p * (alpha / 255.0)))
+
+                    img.alpha_composite(row_img)
+
+            draw.line([(0,0), (50,0)], fill=ACCENT_CYAN, width=4)
+            draw.line([(0,0), (0,50)], fill=ACCENT_CYAN, width=4)
+            draw.line([(WIDTH,0), (WIDTH-50,0)], fill=ACCENT_CYAN, width=4)
+            draw.line([(WIDTH,0), (WIDTH,50)], fill=ACCENT_CYAN, width=4)
+            draw.line([(0,HEIGHT), (50,HEIGHT)], fill=ACCENT_CYAN, width=4)
+            draw.line([(0,HEIGHT), (0,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
+            draw.line([(WIDTH,HEIGHT), (WIDTH-50,HEIGHT)], fill=ACCENT_CYAN, width=4)
+            draw.line([(WIDTH,HEIGHT), (WIDTH,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
+
+        images.append(img.convert('RGB'))
+    return images
+
+def render_zone(data, prev_data, regionName, history):
+    prevList = []
+    if prev_data and "zones" in prev_data:
+        for z in prev_data["zones"]:
+            prevList.append(RenderableZone(z))
+        prevList.sort(key=lambda z: z.nameToDisplay.lower())
+        for i, z in enumerate(prevList):
+            z.prevIndex = i
+
+    currentList = []
+    if data and "zones" in data:
+        for z in data["zones"]:
+            currentList.append(RenderableZone(z))
+        currentList.sort(key=lambda z: z.nameToDisplay.lower())
+        for i, z in enumerate(currentList):
+            z.targetIndex = i
+
+    renderList = []
+    for cz in currentList:
+        pz = next((p for p in prevList if p.uuid == cz.uuid), None)
+        if pz:
+            cz.prevIndex = pz.prevIndex
+            cz.prevRezStatusText = pz.rezStatusText
+            cz.prevLiEstText = pz.liEstText
+            cz.rezStatusChanged = cz.rezStatusText != pz.rezStatusText
+            cz.liEstChanged = cz.liEstText != pz.liEstText
+        else:
+            cz.isNew = True
+            cz.prevIndex = cz.targetIndex
+        renderList.append(cz)
+
+    for pz in prevList:
+        found = any(cz.uuid == pz.uuid for cz in currentList)
+        if not found:
+            pz.isRemoved = True
+            pz.targetIndex = pz.prevIndex
+            renderList.append(pz)
+
+    anyChanges = any(rz.isNew or rz.isRemoved or rz.rezStatusChanged or rz.liEstChanged or rz.prevIndex != rz.targetIndex for rz in renderList)
+
+    frames = 32 if anyChanges else 1
+
+    images = []
+    for f in range(frames):
+        img = Image.new('RGBA', (WIDTH, HEIGHT), BG_COLOR)
+        draw = ImageDraw.Draw(img)
+
+        if not data and not prev_data:
+            msg = f"NO DATA AVAILABLE FOR {regionName.upper()}"
+            try:
+                tw = draw.textlength(msg, font=FONT_ERROR)
+            except AttributeError:
+                tw = FONT_ERROR.getsize(msg)[0]
+            x = (WIDTH - tw) // 2
+            y = HEIGHT // 2
+            draw.text((x, y), msg, font=FONT_ERROR, fill=ACCENT_RED)
+        else:
+            d = data if data else prev_data
+
+            prims = d.get("remaining_prims", 0)
+            status = d.get("status", "Unknown")
+            fps = d.get("fps", 0.0)
+            lag = d.get("lag", 0)
+
+            margin = 50
+            headerY = 80
+            statsY = 140
+            tableHeaderY = 220
+            rowHeight = 40
+            rowStartY = 270
+
+            draw.text((margin, headerY - 48), f"{regionName.upper()} ZONES", font=FONT_LARGE, fill=ACCENT_CYAN)
+            draw.line([(margin, headerY + 15), (WIDTH - margin, headerY + 15)], fill=ACCENT_CYAN, width=2)
+
+            labels = ["REMAINING PRIMS", "STATUS", "FPS", "LAG"]
+            values = [
+                str(prims),
+                status.upper(),
+                f"{fps:.1f}",
+                f"{lag} %"
+            ]
+
+            colWidth = (WIDTH - 2 * margin) // 4
+
+            for i in range(4):
+                x = margin + (i * colWidth)
+                draw.text((x, statsY), labels[i], font=FONT_LABEL, fill=ACCENT_YELLOW)
+
+                v_col = TEXT_MAIN
+                if i == 0 and prims < 100: v_col = ACCENT_RED
+                elif i == 1 and status.lower() != "ready": v_col = ACCENT_ORANGE
+                elif i == 3 and lag > 10: v_col = ACCENT_RED
+                draw.text((x, statsY + 40), values[i], font=FONT_VAL, fill=v_col)
+
+                # Render prim chart
+                if i == 0 and history and len(history) > 1:
+                    chartY = statsY - 10
+                    chartW = 150
+                    chartH = 40
+
+                    min_val = min(history)
+                    max_val = max(history)
+                    if max_val == min_val: max_val += 1
+
+                    points = []
+                    size = len(history)
+                    for j, val in enumerate(history):
+                        px = x + (j / float(max(1, size - 1))) * chartW
+                        py = chartY + chartH - ((val - min_val) / float(max_val - min_val)) * chartH
+                        points.append((px, py))
+
+                    if len(points) > 1:
+                        draw.line(points, fill=ACCENT_CYAN, width=2)
+
+            draw.line([(margin, statsY + 100), (WIDTH - margin, statsY + 100)], fill=BORDER_COLOR, width=1)
+
+            cols = [50, 450, 650, 770, 890]
+            tableHeaders = ["ZONE", "TYPE", "", "LI EST", "STATUS"]
+
+            for i in range(len(tableHeaders)):
+                draw.text((cols[i], tableHeaderY), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
+
+            draw.line([(margin, tableHeaderY + 30), (WIDTH - margin, tableHeaderY + 30)], fill=ACCENT_CYAN, width=1)
+
+            if renderList:
+                globalProgress = f / (frames - 1) if frames > 1 else 1.0
+                slideProgress = min(1.0, f / 16.0) if frames > 1 else 1.0
+                slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
+
+                for rZone in renderList:
+                    prevY = rowStartY + rZone.prevIndex * rowHeight
+                    targetY = rowStartY + rZone.targetIndex * rowHeight
+                    currentY = int(prevY + (targetY - prevY) * slideProgress)
+
+                    if currentY > HEIGHT - 20 and prevY > HEIGHT - 20: continue
+
+                    alpha = 255
+                    if rZone.isNew:
+                        alpha = int(255 * min(1.0, max(0.0, slideProgress)))
+                    elif rZone.isRemoved:
+                        alpha = int(255 * min(1.0, max(0.0, 1.0 - slideProgress)))
+
+                    name = rZone.nameToDisplay
+                    currentX = cols[0]
+
+                    row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+                    row_draw = ImageDraw.Draw(row_img)
+
+                    if len(name) > 25: name = name[:25] + "..."
+                    row_draw.text((currentX, currentY), name, font=FONT_ROW, fill=TEXT_MAIN)
+
+                    typeColor = ACCENT_CYAN if rZone.isDynamic else TEXT_MAIN
+                    typeText = "Dynamic" if rZone.isDynamic else "Static"
+                    row_draw.text((cols[1], currentY), typeText, font=FONT_ROW, fill=typeColor)
+
+                    liColor = TEXT_MAIN
+                    if rZone.liEstText in ["~", "-"]:
+                        liColor = BORDER_COLOR
+                    draw_crossfade_text(row_draw, cols[3], currentY, rZone.prevLiEstText, rZone.liEstText, liColor, globalProgress, FONT_ROW)
+
+                    statusColor = TEXT_MAIN
+                    status = rZone.rezStatus.lower()
+                    if status in ["deployed", "rezzing"]:
+                        statusColor = ACCENT_GREEN
+                    elif status in ["not deployed", "derezzing"]:
+                        statusColor = ACCENT_ORANGE
+                    elif status == "unknown":
+                        statusColor = BORDER_COLOR
+                    draw_crossfade_text(row_draw, cols[4], currentY, rZone.prevRezStatusText, rZone.rezStatusText, statusColor, globalProgress, FONT_ROW)
+
+                    row_draw.line([(margin, currentY + rowHeight - 5), (WIDTH - margin, currentY + rowHeight - 5)], fill=(40, 50, 60), width=1)
+
+                    if alpha < 255:
+                        row_img.putalpha(row_img.split()[3].point(lambda p: p * (alpha / 255.0)))
+
+                    img.alpha_composite(row_img)
+
+            draw.line([(0,0), (50,0)], fill=ACCENT_CYAN, width=4)
+            draw.line([(0,0), (0,50)], fill=ACCENT_CYAN, width=4)
+            draw.line([(WIDTH,0), (WIDTH-50,0)], fill=ACCENT_CYAN, width=4)
+            draw.line([(WIDTH,0), (WIDTH,50)], fill=ACCENT_CYAN, width=4)
+            draw.line([(0,HEIGHT), (50,HEIGHT)], fill=ACCENT_CYAN, width=4)
+            draw.line([(0,HEIGHT), (0,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
+            draw.line([(WIDTH,HEIGHT), (WIDTH-50,HEIGHT)], fill=ACCENT_CYAN, width=4)
+            draw.line([(WIDTH,HEIGHT), (WIDTH,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
+
+        images.append(img.convert('RGB'))
+    return images
+
+@app.post("/")
+@app.post("/render")
+async def render(request: Request, payload: RenderRequest):
+    data = payload.data or {}
+    prev_data = payload.previousData or {}
+    regionName = payload.regionName
+    render_type = payload.type
+    primsHistory = payload.primsHistory
+
+    if render_type == "zone":
+        images = render_zone(data, prev_data, regionName, primsHistory)
     else:
         images = render_sim(data, prev_data, regionName)
 
