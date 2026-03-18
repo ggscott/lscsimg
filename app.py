@@ -294,7 +294,7 @@ def render_sim(data, prev_data, regionName):
             for i in range(len(tableHeaders)):
                 draw.text((cols[i], tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 5), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
 
-            draw.line([(margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 15), (WIDTH - margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 15)], fill=ACCENT_CYAN, width=1)
+            draw.line([(margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] + 15), (WIDTH - margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] + 15)], fill=ACCENT_CYAN, width=1)
 
             if renderList:
                 globalProgress = f / (frames - 1) if frames > 1 else 1.0
@@ -584,7 +584,7 @@ def render_zone(data, prev_data, regionName, history):
 
                     draw_crossfade_text(row_draw, cols[4], textY, rZone.prevRezStatusText, rZone.rezStatusText, statusColor, globalProgress, FONT_ROW)
 
-                    row_draw.line([(margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] - 15), (WIDTH - margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] - 15)], fill=(40, 50, 60), width=1)
+                    row_draw.line([(margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] + 15), (WIDTH - margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] + 15)], fill=(40, 50, 60), width=1)
 
                     if alpha < 255:
                         row_img.putalpha(row_img.split()[3].point(lambda p: p * (alpha / 255.0)))
