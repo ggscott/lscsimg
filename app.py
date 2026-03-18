@@ -123,15 +123,35 @@ class RenderableZone:
         self.uuid = json_data.get("uuid", "")
         self.nameToDisplay = json_data.get("name", "Unknown Zone")
         self.isDynamic = json_data.get("isDynamic", False)
-        self.rezStatus = json_data.get("rezStatus", "Not deployed")
-        self.rezStatusText = self.rezStatus
+
+        self.occupancyText = json_data.get("occupancyText", "0")
+        try:
+            self.occupancy = int(self.occupancyText)
+        except:
+            self.occupancy = 0
+
+        self.dynamicText = json_data.get("dynamicText", "Static")
+        self.rezStatusText = json_data.get("rezStatusText", "-")
         self.liEstText = json_data.get("liEstText", "-")
+
+        self.prevOccupancyText = self.occupancyText
+        self.prevDynamicText = self.dynamicText
         self.prevRezStatusText = self.rezStatusText
         self.prevLiEstText = self.liEstText
+
+        # Legacy for potential compatibility
+        self.rezStatus = self.rezStatusText
+
+        if self.dynamicText in ["YES", "Ready", "Missing", "No Comms"]:
+            self.isDynamic = True
+
         self.prevIndex = -1
         self.targetIndex = -1
         self.isNew = False
         self.isRemoved = False
+
+        self.occupancyChanged = False
+        self.dynamicChanged = False
         self.rezStatusChanged = False
         self.liEstChanged = False
 
@@ -391,11 +411,15 @@ def render_zone(data, prev_data, regionName, history):
 
     renderList = []
     for cz in currentList:
-        pz = next((p for p in prevList if p.uuid == cz.uuid), None)
+        pz = next((p for p in prevList if p.nameToDisplay == cz.nameToDisplay), None)
         if pz:
             cz.prevIndex = pz.prevIndex
+            cz.prevOccupancyText = pz.occupancyText
+            cz.prevDynamicText = pz.dynamicText
             cz.prevRezStatusText = pz.rezStatusText
             cz.prevLiEstText = pz.liEstText
+            cz.occupancyChanged = cz.occupancyText != pz.occupancyText
+            cz.dynamicChanged = cz.dynamicText != pz.dynamicText
             cz.rezStatusChanged = cz.rezStatusText != pz.rezStatusText
             cz.liEstChanged = cz.liEstText != pz.liEstText
         else:
@@ -404,13 +428,13 @@ def render_zone(data, prev_data, regionName, history):
         renderList.append(cz)
 
     for pz in prevList:
-        found = any(cz.uuid == pz.uuid for cz in currentList)
+        found = any(cz.nameToDisplay == pz.nameToDisplay for cz in currentList)
         if not found:
             pz.isRemoved = True
             pz.targetIndex = pz.prevIndex
             renderList.append(pz)
 
-    anyChanges = any(rz.isNew or rz.isRemoved or rz.rezStatusChanged or rz.liEstChanged or rz.prevIndex != rz.targetIndex for rz in renderList)
+    anyChanges = any(rz.isNew or rz.isRemoved or rz.occupancyChanged or rz.dynamicChanged or rz.rezStatusChanged or rz.liEstChanged or rz.prevIndex != rz.targetIndex for rz in renderList)
 
     frames = 32 if anyChanges else 1
 
@@ -432,9 +456,6 @@ def render_zone(data, prev_data, regionName, history):
             d = data if data else prev_data
 
             prims = d.get("remaining_prims", 0)
-            status = d.get("status", "Unknown")
-            fps = d.get("fps", 0.0)
-            lag = d.get("lag", 0)
 
             margin = 50
             headerY = 80
@@ -443,63 +464,74 @@ def render_zone(data, prev_data, regionName, history):
             rowHeight = 40
             rowStartY = 270
 
-            draw.text((margin, headerY - 48), f"{regionName.upper()} ZONES", font=FONT_LARGE, fill=ACCENT_CYAN)
+            draw.text((margin, headerY - 48), regionName.upper(), font=FONT_LARGE, fill=ACCENT_CYAN)
             draw.line([(margin, headerY + 15), (WIDTH - margin, headerY + 15)], fill=ACCENT_CYAN, width=2)
 
-            labels = ["REMAINING PRIMS", "STATUS", "FPS", "LAG"]
+            labels = ["REMAINING PRIMS"]
             values = [
-                str(prims),
-                status.upper(),
-                f"{fps:.1f}",
-                f"{lag} %"
+                str(prims)
             ]
 
-            colWidth = (WIDTH - 2 * margin) // 4
+            colWidth = (WIDTH - 2 * margin)
 
-            for i in range(4):
+            for i in range(1):
                 x = margin + (i * colWidth)
                 draw.text((x, statsY), labels[i], font=FONT_LABEL, fill=ACCENT_YELLOW)
 
                 v_col = TEXT_MAIN
                 if i == 0 and prims < 100: v_col = ACCENT_RED
-                elif i == 1 and status.lower() != "ready": v_col = ACCENT_ORANGE
-                elif i == 3 and lag > 10: v_col = ACCENT_RED
                 draw.text((x, statsY + 40), values[i], font=FONT_VAL, fill=v_col)
 
                 # Render prim chart
                 if i == 0 and history and len(history) > 1:
+                    chartX = x + 250
                     chartY = statsY - 10
-                    chartW = 150
-                    chartH = 40
+                    chartW = 200
+                    chartH = 50
 
                     min_val = min(history)
                     max_val = max(history)
-                    if max_val == min_val: max_val += 1
+                    if max_val == min_val:
+                        min_val -= 10
+                        max_val += 10
 
                     points = []
                     size = len(history)
                     for j, val in enumerate(history):
-                        px = x + (j / float(max(1, size - 1))) * chartW
+                        px = chartX + (j / float(max(1, size - 1))) * chartW
                         py = chartY + chartH - ((val - min_val) / float(max_val - min_val)) * chartH
                         points.append((px, py))
 
                     if len(points) > 1:
+                        # Draw filled polygon (using cyan with 50/255 alpha ~50 out of 255)
+                        poly_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+                        poly_draw = ImageDraw.Draw(poly_img)
+                        poly_points = [(chartX, chartY + chartH)] + points + [(points[-1][0], chartY + chartH)]
+                        poly_draw.polygon(poly_points, fill=(ACCENT_CYAN[0], ACCENT_CYAN[1], ACCENT_CYAN[2], 50))
+                        img.alpha_composite(poly_img)
+
+                        # Draw outline
                         draw.line(points, fill=ACCENT_CYAN, width=2)
 
-            draw.line([(margin, statsY + 100), (WIDTH - margin, statsY + 100)], fill=BORDER_COLOR, width=1)
+            draw.line([(margin, statsY + 60), (WIDTH - margin, statsY + 60)], fill=BORDER_COLOR, width=1)
 
-            cols = [50, 450, 650, 770, 890]
-            tableHeaders = ["ZONE", "TYPE", "", "LI EST", "STATUS"]
+            cols = [50, 420, 560, 680, 800]
+            tableHeaders = ["ZONE", "OCCUPANCY", "DYNAMIC", "LI (EST)", "STATE"]
 
             for i in range(len(tableHeaders)):
                 draw.text((cols[i], tableHeaderY), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
 
-            draw.line([(margin, tableHeaderY + 30), (WIDTH - margin, tableHeaderY + 30)], fill=ACCENT_CYAN, width=1)
+            draw.line([(margin, tableHeaderY + 10), (WIDTH - margin, tableHeaderY + 10)], fill=ACCENT_CYAN, width=1)
 
             if renderList:
                 globalProgress = f / (frames - 1) if frames > 1 else 1.0
                 slideProgress = min(1.0, f / 16.0) if frames > 1 else 1.0
                 slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
+
+                pulseProgress = 0.0
+                if frames > 1 and f >= 16:
+                    pulsePhase = (f - 16) / 15.0
+                    pulseProgress = math.sin(pulsePhase * math.pi)
 
                 for rZone in renderList:
                     prevY = rowStartY + rZone.prevIndex * rowHeight
@@ -511,6 +543,13 @@ def render_zone(data, prev_data, regionName, history):
                     alpha = 255
                     if rZone.isNew:
                         alpha = int(255 * min(1.0, max(0.0, slideProgress)))
+                        if pulseProgress > 0:
+                            box_alpha = int(60 * pulseProgress)
+                            box_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], box_alpha)
+                            draw.rectangle([margin - 10, currentY - 5, WIDTH - margin + 10, currentY + rowHeight - 5], fill=box_fill)
+                            outline_alpha = int(180 * pulseProgress)
+                            outline_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], outline_alpha)
+                            draw.rectangle([margin - 10, currentY - 5, WIDTH - margin + 10, currentY + rowHeight - 5], outline=outline_fill)
                     elif rZone.isRemoved:
                         alpha = int(255 * min(1.0, max(0.0, 1.0 - slideProgress)))
 
@@ -523,9 +562,17 @@ def render_zone(data, prev_data, regionName, history):
                     if len(name) > 25: name = name[:25] + "..."
                     row_draw.text((currentX, currentY), name, font=FONT_ROW, fill=TEXT_MAIN)
 
-                    typeColor = ACCENT_CYAN if rZone.isDynamic else TEXT_MAIN
-                    typeText = "Dynamic" if rZone.isDynamic else "Static"
-                    row_draw.text((cols[1], currentY), typeText, font=FONT_ROW, fill=typeColor)
+                    occColor = TEXT_MAIN
+                    if rZone.occupancy > 0:
+                        occColor = ACCENT_GREEN
+                    draw_crossfade_text(row_draw, cols[1], currentY, rZone.prevOccupancyText, rZone.occupancyText, occColor, globalProgress, FONT_ROW)
+
+                    dynColor = TEXT_MAIN
+                    if rZone.dynamicText == "Missing":
+                        dynColor = ACCENT_RED
+                    elif rZone.dynamicText == "No Comms":
+                        dynColor = ACCENT_YELLOW
+                    draw_crossfade_text(row_draw, cols[2], currentY, rZone.prevDynamicText, rZone.dynamicText, dynColor, globalProgress, FONT_ROW)
 
                     liColor = TEXT_MAIN
                     if rZone.liEstText in ["~", "-"]:
@@ -533,13 +580,15 @@ def render_zone(data, prev_data, regionName, history):
                     draw_crossfade_text(row_draw, cols[3], currentY, rZone.prevLiEstText, rZone.liEstText, liColor, globalProgress, FONT_ROW)
 
                     statusColor = TEXT_MAIN
-                    status = rZone.rezStatus.lower()
-                    if status in ["deployed", "rezzing"]:
-                        statusColor = ACCENT_GREEN
-                    elif status in ["not deployed", "derezzing"]:
-                        statusColor = ACCENT_ORANGE
-                    elif status == "unknown":
+                    if rZone.isDynamic:
+                        status = rZone.rezStatusText.lower()
+                        if status in ["deployed", "rezzing"]:
+                            statusColor = ACCENT_GREEN
+                        elif status in ["not deployed", "derezzing"]:
+                            statusColor = ACCENT_ORANGE
+                    else:
                         statusColor = BORDER_COLOR
+
                     draw_crossfade_text(row_draw, cols[4], currentY, rZone.prevRezStatusText, rZone.rezStatusText, statusColor, globalProgress, FONT_ROW)
 
                     row_draw.line([(margin, currentY + rowHeight - 5), (WIDTH - margin, currentY + rowHeight - 5)], fill=(40, 50, 60), width=1)
@@ -579,7 +628,7 @@ async def render(request: Request, payload: RenderRequest):
         images = render_sim(data, prev_data, regionName)
 
     safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', regionName)
-    filename = f"{safe_name}.gif"
+    filename = f"{safe_name}_{render_type}.gif"
     filepath = os.path.join("static", filename)
 
     if images:
