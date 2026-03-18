@@ -560,6 +560,9 @@ def render_zone(data, prev_data, regionName, history):
 
         images.append(img.convert('RGB'))
     return images
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 @app.post("/")
 @app.post("/render")
