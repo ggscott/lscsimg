@@ -292,7 +292,7 @@ def render_sim(data, prev_data, regionName):
             tableHeaders = ["USER", "SCRIPTS (T/A)", "TIME", "MEMORY", "CMPLX"]
 
             for i in range(len(tableHeaders)):
-                draw.text((cols[i], tableHeaderY - FONT_TBL_HDR.getmetrics()[0]), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
+                draw.text((cols[i], tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 5), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
 
             draw.line([(margin, tableHeaderY + 10), (WIDTH - margin, tableHeaderY + 10)], fill=ACCENT_CYAN, width=1)
 
@@ -332,7 +332,7 @@ def render_sim(data, prev_data, regionName):
                     row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
                     row_draw = ImageDraw.Draw(row_img)
 
-                    textY = currentY - 20 # Font size is 20
+                    textY = currentY - FONT_ROW.getmetrics()[0] - 5
                     if rUser.isOOC:
                         row_draw.text((currentX, textY), "OOC:", font=FONT_ROW, fill=ACCENT_ORANGE)
                         try:
@@ -520,7 +520,7 @@ def render_zone(data, prev_data, regionName, history):
             tableHeaders = ["ZONE", "OCCUPANCY", "DYNAMIC", "LI (EST)", "STATE"]
 
             for i in range(len(tableHeaders)):
-                draw.text((cols[i], tableHeaderY), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
+                draw.text((cols[i], tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 5), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
 
             draw.line([(margin, tableHeaderY + 10), (WIDTH - margin, tableHeaderY + 10)], fill=ACCENT_CYAN, width=1)
 
@@ -560,7 +560,7 @@ def render_zone(data, prev_data, regionName, history):
                     row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
                     row_draw = ImageDraw.Draw(row_img)
 
-                    textY = currentY - FONT_ROW.getmetrics()[0]
+                    textY = currentY - FONT_ROW.getmetrics()[0] - 5
                     if len(name) > 25: name = name[:25] + "..."
                     row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
 
