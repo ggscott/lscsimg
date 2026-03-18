@@ -248,7 +248,7 @@ def render_sim(data, prev_data, regionName):
             except AttributeError:
                 tw = FONT_ERROR.getsize(msg)[0]
             x = (WIDTH - tw) // 2
-            y = HEIGHT // 2
+            y = HEIGHT // 2 - FONT_ERROR.getmetrics()[0]
             draw.text((x, y), msg, font=FONT_ERROR, fill=ACCENT_RED)
         else:
             d = data if data else prev_data
@@ -265,7 +265,7 @@ def render_sim(data, prev_data, regionName):
             rowHeight = 40
             rowStartY = 270
 
-            draw.text((margin, headerY - 48), regionName.upper(), font=FONT_LARGE, fill=ACCENT_CYAN)
+            draw.text((margin, headerY - FONT_LARGE.getmetrics()[0]), regionName.upper(), font=FONT_LARGE, fill=ACCENT_CYAN)
             draw.line([(margin, headerY + 15), (WIDTH - margin, headerY + 15)], fill=ACCENT_CYAN, width=2)
 
             labels = ["ROLEPLAYERS", "FPS", "TIME DILATION", "LAG"]
@@ -280,21 +280,21 @@ def render_sim(data, prev_data, regionName):
 
             for i in range(4):
                 x = margin + (i * colWidth)
-                draw.text((x, statsY), labels[i], font=FONT_LABEL, fill=ACCENT_YELLOW)
+                draw.text((x, statsY - FONT_LABEL.getmetrics()[0]), labels[i], font=FONT_LABEL, fill=ACCENT_YELLOW)
 
                 v_col = TEXT_MAIN
                 if i == 3 and lag > 10: v_col = ACCENT_RED
-                draw.text((x, statsY + 30), values[i], font=FONT_VAL, fill=v_col)
+                draw.text((x, statsY + 40 - FONT_VAL.getmetrics()[0]), values[i], font=FONT_VAL, fill=v_col)
 
-            draw.line([(margin, statsY + 80), (WIDTH - margin, statsY + 80)], fill=BORDER_COLOR, width=1)
+            draw.line([(margin, statsY + 60), (WIDTH - margin, statsY + 60)], fill=BORDER_COLOR, width=1)
 
             cols = [50, 450, 650, 770, 890]
             tableHeaders = ["USER", "SCRIPTS (T/A)", "TIME", "MEMORY", "CMPLX"]
 
             for i in range(len(tableHeaders)):
-                draw.text((cols[i], tableHeaderY), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
+                draw.text((cols[i], tableHeaderY - FONT_TBL_HDR.getmetrics()[0]), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
 
-            draw.line([(margin, tableHeaderY + 30), (WIDTH - margin, tableHeaderY + 30)], fill=ACCENT_CYAN, width=1)
+            draw.line([(margin, tableHeaderY + 10), (WIDTH - margin, tableHeaderY + 10)], fill=ACCENT_CYAN, width=1)
 
             if renderList:
                 globalProgress = f / (frames - 1) if frames > 1 else 1.0
@@ -332,35 +332,36 @@ def render_sim(data, prev_data, regionName):
                     row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
                     row_draw = ImageDraw.Draw(row_img)
 
+                    textY = currentY - 20 # Font size is 20
                     if rUser.isOOC:
-                        row_draw.text((currentX, currentY), "OOC:", font=FONT_ROW, fill=ACCENT_ORANGE)
+                        row_draw.text((currentX, textY), "OOC:", font=FONT_ROW, fill=ACCENT_ORANGE)
                         try:
                             tw = row_draw.textlength("OOC:", font=FONT_ROW)
                         except AttributeError:
                             tw = FONT_ROW.getsize("OOC:")[0]
                         currentX += int(tw)
                         if len(name) > 21: name = name[:21] + "..."
-                        row_draw.text((currentX, currentY), name, font=FONT_ROW, fill=TEXT_MAIN)
+                        row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
                     elif rUser.isChar:
-                        row_draw.text((currentX, currentY), "<<", font=FONT_ROW, fill=ACCENT_GREEN)
+                        row_draw.text((currentX, textY), "<<", font=FONT_ROW, fill=ACCENT_GREEN)
                         try:
                             tw = row_draw.textlength("<<", font=FONT_ROW)
                         except AttributeError:
                             tw = FONT_ROW.getsize("<<")[0]
                         currentX += int(tw)
                         if len(name) > 21: name = name[:21] + "..."
-                        row_draw.text((currentX, currentY), name, font=FONT_ROW, fill=TEXT_MAIN)
+                        row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
                         try:
                             tw2 = row_draw.textlength(name, font=FONT_ROW)
                         except AttributeError:
                             tw2 = FONT_ROW.getsize(name)[0]
                         currentX += int(tw2)
-                        row_draw.text((currentX, currentY), ">>", font=FONT_ROW, fill=ACCENT_GREEN)
+                        row_draw.text((currentX, textY), ">>", font=FONT_ROW, fill=ACCENT_GREEN)
                     else:
                         if len(name) > 25: name = name[:25] + "..."
-                        row_draw.text((currentX, currentY), name, font=FONT_ROW, fill=TEXT_MAIN)
+                        row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
 
-                    draw_crossfade_text(row_draw, cols[1], currentY, rUser.prevScriptsText, rUser.scriptsText, TEXT_MAIN, globalProgress, FONT_ROW)
+                    draw_crossfade_text(row_draw, cols[1], textY, rUser.prevScriptsText, rUser.scriptsText, TEXT_MAIN, globalProgress, FONT_ROW)
 
                     time_color = TEXT_MAIN
                     try:
@@ -369,9 +370,9 @@ def render_sim(data, prev_data, regionName):
                         elif t > 1: time_color = ACCENT_YELLOW
                     except: pass
 
-                    draw_crossfade_text(row_draw, cols[2], currentY, rUser.prevTimeText, rUser.timeText, time_color, globalProgress, FONT_ROW)
-                    draw_crossfade_text(row_draw, cols[3], currentY, rUser.prevMemoryText, rUser.memoryText, TEXT_MAIN, globalProgress, FONT_ROW)
-                    draw_crossfade_text(row_draw, cols[4], currentY, rUser.prevComplexityText, rUser.complexityText, TEXT_MAIN, globalProgress, FONT_ROW)
+                    draw_crossfade_text(row_draw, cols[2], textY, rUser.prevTimeText, rUser.timeText, time_color, globalProgress, FONT_ROW)
+                    draw_crossfade_text(row_draw, cols[3], textY, rUser.prevMemoryText, rUser.memoryText, TEXT_MAIN, globalProgress, FONT_ROW)
+                    draw_crossfade_text(row_draw, cols[4], textY, rUser.prevComplexityText, rUser.complexityText, TEXT_MAIN, globalProgress, FONT_ROW)
 
                     row_draw.line([(margin, currentY + rowHeight - 5), (WIDTH - margin, currentY + rowHeight - 5)], fill=(40, 50, 60), width=1)
 
@@ -450,7 +451,7 @@ def render_zone(data, prev_data, regionName, history):
             except AttributeError:
                 tw = FONT_ERROR.getsize(msg)[0]
             x = (WIDTH - tw) // 2
-            y = HEIGHT // 2
+            y = HEIGHT // 2 - FONT_ERROR.getmetrics()[0]
             draw.text((x, y), msg, font=FONT_ERROR, fill=ACCENT_RED)
         else:
             d = data if data else prev_data
@@ -464,7 +465,7 @@ def render_zone(data, prev_data, regionName, history):
             rowHeight = 40
             rowStartY = 270
 
-            draw.text((margin, headerY - 48), regionName.upper(), font=FONT_LARGE, fill=ACCENT_CYAN)
+            draw.text((margin, headerY - FONT_LARGE.getmetrics()[0]), regionName.upper(), font=FONT_LARGE, fill=ACCENT_CYAN)
             draw.line([(margin, headerY + 15), (WIDTH - margin, headerY + 15)], fill=ACCENT_CYAN, width=2)
 
             labels = ["REMAINING PRIMS"]
@@ -476,11 +477,11 @@ def render_zone(data, prev_data, regionName, history):
 
             for i in range(1):
                 x = margin + (i * colWidth)
-                draw.text((x, statsY), labels[i], font=FONT_LABEL, fill=ACCENT_YELLOW)
+                draw.text((x, statsY - FONT_LABEL.getmetrics()[0]), labels[i], font=FONT_LABEL, fill=ACCENT_YELLOW)
 
                 v_col = TEXT_MAIN
                 if i == 0 and prims < 100: v_col = ACCENT_RED
-                draw.text((x, statsY + 40), values[i], font=FONT_VAL, fill=v_col)
+                draw.text((x, statsY + 40 - FONT_VAL.getmetrics()[0]), values[i], font=FONT_VAL, fill=v_col)
 
                 # Render prim chart
                 if i == 0 and history and len(history) > 1:
@@ -559,25 +560,26 @@ def render_zone(data, prev_data, regionName, history):
                     row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
                     row_draw = ImageDraw.Draw(row_img)
 
+                    textY = currentY - FONT_ROW.getmetrics()[0]
                     if len(name) > 25: name = name[:25] + "..."
-                    row_draw.text((currentX, currentY), name, font=FONT_ROW, fill=TEXT_MAIN)
+                    row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
 
                     occColor = TEXT_MAIN
                     if rZone.occupancy > 0:
                         occColor = ACCENT_GREEN
-                    draw_crossfade_text(row_draw, cols[1], currentY, rZone.prevOccupancyText, rZone.occupancyText, occColor, globalProgress, FONT_ROW)
+                    draw_crossfade_text(row_draw, cols[1], textY, rZone.prevOccupancyText, rZone.occupancyText, occColor, globalProgress, FONT_ROW)
 
                     dynColor = TEXT_MAIN
                     if rZone.dynamicText == "Missing":
                         dynColor = ACCENT_RED
                     elif rZone.dynamicText == "No Comms":
                         dynColor = ACCENT_YELLOW
-                    draw_crossfade_text(row_draw, cols[2], currentY, rZone.prevDynamicText, rZone.dynamicText, dynColor, globalProgress, FONT_ROW)
+                    draw_crossfade_text(row_draw, cols[2], textY, rZone.prevDynamicText, rZone.dynamicText, dynColor, globalProgress, FONT_ROW)
 
                     liColor = TEXT_MAIN
                     if rZone.liEstText in ["~", "-"]:
                         liColor = BORDER_COLOR
-                    draw_crossfade_text(row_draw, cols[3], currentY, rZone.prevLiEstText, rZone.liEstText, liColor, globalProgress, FONT_ROW)
+                    draw_crossfade_text(row_draw, cols[3], textY, rZone.prevLiEstText, rZone.liEstText, liColor, globalProgress, FONT_ROW)
 
                     statusColor = TEXT_MAIN
                     if rZone.isDynamic:
@@ -589,7 +591,7 @@ def render_zone(data, prev_data, regionName, history):
                     else:
                         statusColor = BORDER_COLOR
 
-                    draw_crossfade_text(row_draw, cols[4], currentY, rZone.prevRezStatusText, rZone.rezStatusText, statusColor, globalProgress, FONT_ROW)
+                    draw_crossfade_text(row_draw, cols[4], textY, rZone.prevRezStatusText, rZone.rezStatusText, statusColor, globalProgress, FONT_ROW)
 
                     row_draw.line([(margin, currentY + rowHeight - 5), (WIDTH - margin, currentY + rowHeight - 5)], fill=(40, 50, 60), width=1)
 
