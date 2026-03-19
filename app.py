@@ -242,7 +242,7 @@ def render_sim(data, prev_data, regionName):
 
     anyChanges = any(ru.isNew or ru.isRemoved or ru.scriptsChanged or ru.timeChanged or ru.memoryChanged or ru.complexityChanged or ru.prevIndex != ru.targetIndex for ru in renderList)
 
-    frames = 32 if anyChanges else 1
+    frames = 8 if anyChanges else 1
 
     images = []
 
@@ -323,12 +323,12 @@ def render_sim(data, prev_data, regionName):
             cols = [50, 450, 650, 770, 890]
             if renderList:
                 globalProgress = f / (frames - 1) if frames > 1 else 1.0
-                slideProgress = min(1.0, f / 16.0) if frames > 1 else 1.0
+                slideProgress = min(1.0, f / 4.0) if frames > 1 else 1.0
                 slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
 
                 pulseProgress = 0.0
-                if frames > 1 and f >= 16:
-                    pulsePhase = (f - 16) / 15.0
+                if frames > 1 and f >= 4:
+                    pulsePhase = (f - 4) / 3.0
                     pulseProgress = abs(math.sin(pulsePhase * 3.0 * math.pi))
 
                 for rUser in renderList:
@@ -457,7 +457,7 @@ def render_zone(data, prev_data, regionName, history):
 
     anyChanges = any(rz.isNew or rz.isRemoved or rz.occupancyChanged or rz.dynamicChanged or rz.rezStatusChanged or rz.liEstChanged or rz.prevIndex != rz.targetIndex for rz in renderList)
 
-    frames = 32 if anyChanges else 1
+    frames = 8 if anyChanges else 1
 
     images = []
 
@@ -566,7 +566,7 @@ def render_zone(data, prev_data, regionName, history):
             cols = [50, 420, 560, 680, 800]
             if renderList:
                 globalProgress = f / (frames - 1) if frames > 1 else 1.0
-                slideProgress = min(1.0, f / 16.0) if frames > 1 else 1.0
+                slideProgress = min(1.0, f / 4.0) if frames > 1 else 1.0
                 slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
 
                 for rZone in renderList:
