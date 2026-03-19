@@ -314,6 +314,10 @@ def render_sim(data, prev_data, regionName):
                     if currentY > HEIGHT - 20 and prevY > HEIGHT - 20: continue
 
                     alpha = 255
+
+                    row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+                    row_draw = ImageDraw.Draw(row_img)
+
                     if rUser.isNew:
                         alpha = int(255 * min(1.0, max(0.0, slideProgress)))
                         if pulseProgress > 0:
@@ -324,18 +328,15 @@ def render_sim(data, prev_data, regionName):
                             # Line below: currentY + rowHeight - FONT_ROW.getmetrics()[0] - 15
                             box_top = currentY - FONT_ROW.getmetrics()[0] - 13
                             box_bottom = currentY + rowHeight - FONT_ROW.getmetrics()[0] - 17
-                            draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], fill=box_fill)
+                            row_draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], fill=box_fill)
                             outline_alpha = int(180 * pulseProgress)
                             outline_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], outline_alpha)
-                            draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], outline=outline_fill)
+                            row_draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], outline=outline_fill)
                     elif rUser.isRemoved:
                         alpha = int(255 * min(1.0, max(0.0, 1.0 - slideProgress)))
 
                     name = rUser.nameToDisplay
                     currentX = cols[0]
-
-                    row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
-                    row_draw = ImageDraw.Draw(row_img)
 
                     textY = currentY - FONT_ROW.getmetrics()[0] - 5
                     if rUser.isOOC:
