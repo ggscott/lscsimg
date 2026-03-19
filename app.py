@@ -688,7 +688,7 @@ async def render(request: Request, payload: RenderRequest):
 
             if images:
                 if len(images) > 1:
-                    images[0].save(filepath, save_all=True, append_images=images[1:], duration=125, loop=0)
+                    images[0].save(filepath, save_all=True, append_images=images[1:], duration=125)
                 else:
                     images[0].save(filepath)
         finally:
