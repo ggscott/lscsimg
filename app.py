@@ -1,9 +1,11 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse, FileResponse
 # from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import os
+import time
+import asyncio
 import io
 import base64
 from fastapi.responses import Response
@@ -17,7 +19,7 @@ import urllib.request
 app = FastAPI()
 
 # Ensure static directory exists
-# Removed static directory creation
+os.makedirs("static", exist_ok=True)
 # Removed static mount
 
 WIDTH = 1024
@@ -648,17 +650,39 @@ async def render(request: Request, payload: RenderRequest):
     if not images:
         return JSONResponse(status_code=500, content={"detail": "Failed to generate image."})
 
-    img_io = io.BytesIO()
+    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', regionName)
+    unique_id = uuid.uuid4().hex
+    filename = f"{safe_name}_{render_type}_{unique_id}.gif"
+    filepath = os.path.join("static", filename)
+
     if len(images) > 1:
-        images[0].save(img_io, format='GIF', save_all=True, append_images=images[1:], duration=125, loop=0)
+        images[0].save(filepath, save_all=True, append_images=images[1:], duration=125, loop=0)
     else:
-        images[0].save(img_io, format='GIF')
+        images[0].save(filepath)
 
-    img_data = img_io.getvalue()
-    base64_encoded = base64.b64encode(img_data).decode('utf-8')
-    data_uri = f"data:image/gif;base64,{base64_encoded}"
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    forwarded_host = request.headers.get("x-forwarded-host")
+    scheme = forwarded_proto if forwarded_proto else ("https" if request.url.scheme == "https" else "http")
+    host = forwarded_host if forwarded_host else request.headers.get("host", "localhost:8000")
+    base_url = f"{scheme}://{host}"
 
-    return JSONResponse(content={"url": data_uri})
+    return JSONResponse(content={"url": f"{base_url}/static/{filename}"})
+
+@app.get("/static/{filename}")
+async def get_static_file(filename: str):
+    filepath = os.path.join("static", filename)
+
+    # Prevent directory traversal
+    if not os.path.abspath(filepath).startswith(os.path.abspath("static")):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Poll up to 15 times, waiting 1 second between checks
+    for _ in range(15):
+        if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+            return FileResponse(filepath, media_type="image/gif")
+        await asyncio.sleep(1.0)
+
+    raise HTTPException(status_code=404, detail="File not found")
 
 if __name__ == "__main__":
     import uvicorn
