@@ -304,7 +304,7 @@ def render_sim(data, prev_data, regionName):
                 pulseProgress = 0.0
                 if frames > 1 and f >= 16:
                     pulsePhase = (f - 16) / 15.0
-                    pulseProgress = math.sin(pulsePhase * math.pi)
+                    pulseProgress = abs(math.sin(pulsePhase * 3.0 * math.pi))
 
                 for rUser in renderList:
                     prevY = rowStartY + rUser.prevIndex * rowHeight
