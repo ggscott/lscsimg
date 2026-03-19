@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import os
+import uuid
 from PIL import Image, ImageDraw, ImageFont
 import math
 from urllib.parse import urlparse
@@ -188,6 +189,7 @@ def draw_crossfade_text(draw, x, y, oldText, newText, baseColor, progress, font)
 
         currentX += charWidth
 
+
 def render_sim(data, prev_data, regionName):
     prevList = []
     if prev_data and "users" in prev_data:
@@ -237,65 +239,81 @@ def render_sim(data, prev_data, regionName):
 
     images = []
 
+    # PRE-RENDER BASE IMAGE
+    base_img = Image.new('RGBA', (WIDTH, HEIGHT), BG_COLOR)
+    base_draw = ImageDraw.Draw(base_img)
+
+    margin = 50
+    headerY = 80
+    statsY = 140
+    tableHeaderY = 220
+    rowHeight = 40
+    rowStartY = 270
+
+    if not data and not prev_data:
+        msg = f"NO DATA AVAILABLE FOR {regionName.upper()}"
+        try:
+            tw = base_draw.textlength(msg, font=FONT_ERROR)
+        except AttributeError:
+            tw = FONT_ERROR.getsize(msg)[0]
+        x = (WIDTH - tw) // 2
+        y = HEIGHT // 2 - FONT_ERROR.getmetrics()[0]
+        base_draw.text((x, y), msg, font=FONT_ERROR, fill=ACCENT_RED)
+    else:
+        d = data if data else prev_data
+
+        agents = d.get("agents", 0)
+        fps = d.get("fps", 0.0)
+        dilation = d.get("dilation", 0.0)
+        lag = d.get("lag", 0)
+
+        base_draw.text((margin, headerY - FONT_LARGE.getmetrics()[0]), regionName.upper(), font=FONT_LARGE, fill=ACCENT_CYAN)
+        base_draw.line([(margin, headerY + 15), (WIDTH - margin, headerY + 15)], fill=ACCENT_CYAN, width=2)
+
+        labels = ["ROLEPLAYERS", "FPS", "TIME DILATION", "LAG"]
+        values = [
+            str(agents),
+            f"{fps:.1f}",
+            f"{dilation:.2f}",
+            f"{lag} %"
+        ]
+
+        colWidth = (WIDTH - 2 * margin) // 4
+
+        for i in range(4):
+            x = margin + (i * colWidth)
+            base_draw.text((x, statsY - FONT_LABEL.getmetrics()[0]), labels[i], font=FONT_LABEL, fill=ACCENT_YELLOW)
+
+            v_col = TEXT_MAIN
+            if i == 3 and lag > 10: v_col = ACCENT_RED
+            base_draw.text((x, statsY + 40 - FONT_VAL.getmetrics()[0]), values[i], font=FONT_VAL, fill=v_col)
+
+        base_draw.line([(margin, statsY + 55), (WIDTH - margin, statsY + 55)], fill=BORDER_COLOR, width=1)
+
+        cols = [50, 450, 650, 770, 890]
+        tableHeaders = ["USER", "SCRIPTS (T/A)", "TIME", "MEMORY", "CMPLX"]
+
+        for i in range(len(tableHeaders)):
+            base_draw.text((cols[i], tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 5), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
+
+        base_draw.line([(margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25), (WIDTH - margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25)], fill=ACCENT_CYAN, width=1)
+
+        # Borders
+        base_draw.line([(0,0), (50,0)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(0,0), (0,50)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(WIDTH,0), (WIDTH-50,0)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(WIDTH,0), (WIDTH,50)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(0,HEIGHT), (50,HEIGHT)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(0,HEIGHT), (0,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(WIDTH,HEIGHT), (WIDTH-50,HEIGHT)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(WIDTH,HEIGHT), (WIDTH,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
+
     for f in range(frames):
-        img = Image.new('RGBA', (WIDTH, HEIGHT), BG_COLOR)
+        img = base_img.copy()
         draw = ImageDraw.Draw(img)
 
-        if not data and not prev_data:
-            msg = f"NO DATA AVAILABLE FOR {regionName.upper()}"
-            try:
-                tw = draw.textlength(msg, font=FONT_ERROR)
-            except AttributeError:
-                tw = FONT_ERROR.getsize(msg)[0]
-            x = (WIDTH - tw) // 2
-            y = HEIGHT // 2 - FONT_ERROR.getmetrics()[0]
-            draw.text((x, y), msg, font=FONT_ERROR, fill=ACCENT_RED)
-        else:
-            d = data if data else prev_data
-
-            agents = d.get("agents", 0)
-            fps = d.get("fps", 0.0)
-            dilation = d.get("dilation", 0.0)
-            lag = d.get("lag", 0)
-
-            margin = 50
-            headerY = 80
-            statsY = 140
-            tableHeaderY = 220
-            rowHeight = 40
-            rowStartY = 270
-
-            draw.text((margin, headerY - FONT_LARGE.getmetrics()[0]), regionName.upper(), font=FONT_LARGE, fill=ACCENT_CYAN)
-            draw.line([(margin, headerY + 15), (WIDTH - margin, headerY + 15)], fill=ACCENT_CYAN, width=2)
-
-            labels = ["ROLEPLAYERS", "FPS", "TIME DILATION", "LAG"]
-            values = [
-                str(agents),
-                f"{fps:.1f}",
-                f"{dilation:.2f}",
-                f"{lag} %"
-            ]
-
-            colWidth = (WIDTH - 2 * margin) // 4
-
-            for i in range(4):
-                x = margin + (i * colWidth)
-                draw.text((x, statsY - FONT_LABEL.getmetrics()[0]), labels[i], font=FONT_LABEL, fill=ACCENT_YELLOW)
-
-                v_col = TEXT_MAIN
-                if i == 3 and lag > 10: v_col = ACCENT_RED
-                draw.text((x, statsY + 40 - FONT_VAL.getmetrics()[0]), values[i], font=FONT_VAL, fill=v_col)
-
-            draw.line([(margin, statsY + 55), (WIDTH - margin, statsY + 55)], fill=BORDER_COLOR, width=1)
-
+        if data or prev_data:
             cols = [50, 450, 650, 770, 890]
-            tableHeaders = ["USER", "SCRIPTS (T/A)", "TIME", "MEMORY", "CMPLX"]
-
-            for i in range(len(tableHeaders)):
-                draw.text((cols[i], tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 5), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
-
-            draw.line([(margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25), (WIDTH - margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25)], fill=ACCENT_CYAN, width=1)
-
             if renderList:
                 globalProgress = f / (frames - 1) if frames > 1 else 1.0
                 slideProgress = min(1.0, f / 16.0) if frames > 1 else 1.0
@@ -323,9 +341,6 @@ def render_sim(data, prev_data, regionName):
                         if pulseProgress > 0:
                             box_alpha = int(60 * pulseProgress)
                             box_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], box_alpha)
-                            # Align between the row separator line above and the line below, with padding
-                            # Line above: currentY - FONT_ROW.getmetrics()[0] - 15
-                            # Line below: currentY + rowHeight - FONT_ROW.getmetrics()[0] - 15
                             box_top = currentY - FONT_ROW.getmetrics()[0] - 13
                             box_bottom = currentY + rowHeight - FONT_ROW.getmetrics()[0] - 17
                             row_draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], fill=box_fill)
@@ -387,17 +402,9 @@ def render_sim(data, prev_data, regionName):
 
                     img.alpha_composite(row_img)
 
-            draw.line([(0,0), (50,0)], fill=ACCENT_CYAN, width=4)
-            draw.line([(0,0), (0,50)], fill=ACCENT_CYAN, width=4)
-            draw.line([(WIDTH,0), (WIDTH-50,0)], fill=ACCENT_CYAN, width=4)
-            draw.line([(WIDTH,0), (WIDTH,50)], fill=ACCENT_CYAN, width=4)
-            draw.line([(0,HEIGHT), (50,HEIGHT)], fill=ACCENT_CYAN, width=4)
-            draw.line([(0,HEIGHT), (0,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
-            draw.line([(WIDTH,HEIGHT), (WIDTH-50,HEIGHT)], fill=ACCENT_CYAN, width=4)
-            draw.line([(WIDTH,HEIGHT), (WIDTH,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
-
         images.append(img.convert('RGB'))
     return images
+
 
 def render_zone(data, prev_data, regionName, history):
     prevList = []
@@ -446,93 +453,110 @@ def render_zone(data, prev_data, regionName, history):
     frames = 32 if anyChanges else 1
 
     images = []
+
+    # PRE-RENDER BASE IMAGE
+    base_img = Image.new('RGBA', (WIDTH, HEIGHT), BG_COLOR)
+    base_draw = ImageDraw.Draw(base_img)
+
+    margin = 50
+    headerY = 80
+    statsY = 140
+    tableHeaderY = 220
+    rowHeight = 40
+    rowStartY = 270
+
+    if not data and not prev_data:
+        msg = f"NO DATA AVAILABLE FOR {regionName.upper()}"
+        try:
+            tw = base_draw.textlength(msg, font=FONT_ERROR)
+        except AttributeError:
+            tw = FONT_ERROR.getsize(msg)[0]
+        x = (WIDTH - tw) // 2
+        y = HEIGHT // 2 - FONT_ERROR.getmetrics()[0]
+        base_draw.text((x, y), msg, font=FONT_ERROR, fill=ACCENT_RED)
+    else:
+        d = data if data else prev_data
+
+        prims = d.get("remaining_prims", 0)
+        status = d.get("status", "Unknown")
+        fps = d.get("fps", 0.0)
+        lag = d.get("lag", 0)
+
+        base_draw.text((margin, headerY - FONT_LARGE.getmetrics()[0]), regionName.upper(), font=FONT_LARGE, fill=ACCENT_CYAN)
+        base_draw.line([(margin, headerY + 15), (WIDTH - margin, headerY + 15)], fill=ACCENT_CYAN, width=2)
+
+        labels = ["REMAINING PRIMS"]
+        values = [
+            str(prims)
+        ]
+
+        colWidth = (WIDTH - 2 * margin)
+
+        for i in range(1):
+            x = margin + (i * colWidth)
+            base_draw.text((x, statsY - FONT_LABEL.getmetrics()[0]), labels[i], font=FONT_LABEL, fill=ACCENT_YELLOW)
+
+            v_col = TEXT_MAIN
+            if i == 0 and prims < 100: v_col = ACCENT_RED
+            base_draw.text((x, statsY + 40 - FONT_VAL.getmetrics()[0]), values[i], font=FONT_VAL, fill=v_col)
+
+            # Render prim chart
+            if i == 0 and history and len(history) > 1:
+                chartX = x + 250
+                chartY = statsY - 10
+                chartW = 200
+                chartH = 50
+
+                min_val = min(history)
+                max_val = max(history)
+                if max_val == min_val:
+                    min_val -= 10
+                    max_val += 10
+
+                points = []
+                size = len(history)
+                for j, val in enumerate(history):
+                    px = chartX + (j / float(max(1, size - 1))) * chartW
+                    py = chartY + chartH - ((val - min_val) / float(max_val - min_val)) * chartH
+                    points.append((px, py))
+
+                if len(points) > 1:
+                    # Draw filled polygon (using cyan with 50/255 alpha ~50 out of 255)
+                    poly_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+                    poly_draw = ImageDraw.Draw(poly_img)
+                    poly_points = [(chartX, chartY + chartH)] + points + [(points[-1][0], chartY + chartH)]
+                    poly_draw.polygon(poly_points, fill=(ACCENT_CYAN[0], ACCENT_CYAN[1], ACCENT_CYAN[2], 50))
+                    base_img.alpha_composite(poly_img)
+
+                    # Draw outline
+                    base_draw.line(points, fill=ACCENT_CYAN, width=2)
+
+        base_draw.line([(margin, statsY + 55), (WIDTH - margin, statsY + 55)], fill=BORDER_COLOR, width=1)
+
+        cols = [50, 420, 560, 680, 800]
+        tableHeaders = ["ZONE", "OCCUPANCY", "DYNAMIC", "LI (EST)", "STATE"]
+
+        for i in range(len(tableHeaders)):
+            base_draw.text((cols[i], tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 5), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
+
+        base_draw.line([(margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25), (WIDTH - margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25)], fill=ACCENT_CYAN, width=1)
+
+        # Borders
+        base_draw.line([(0,0), (50,0)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(0,0), (0,50)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(WIDTH,0), (WIDTH-50,0)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(WIDTH,0), (WIDTH,50)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(0,HEIGHT), (50,HEIGHT)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(0,HEIGHT), (0,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(WIDTH,HEIGHT), (WIDTH-50,HEIGHT)], fill=ACCENT_CYAN, width=4)
+        base_draw.line([(WIDTH,HEIGHT), (WIDTH,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
+
     for f in range(frames):
-        img = Image.new('RGBA', (WIDTH, HEIGHT), BG_COLOR)
+        img = base_img.copy()
         draw = ImageDraw.Draw(img)
 
-        if not data and not prev_data:
-            msg = f"NO DATA AVAILABLE FOR {regionName.upper()}"
-            try:
-                tw = draw.textlength(msg, font=FONT_ERROR)
-            except AttributeError:
-                tw = FONT_ERROR.getsize(msg)[0]
-            x = (WIDTH - tw) // 2
-            y = HEIGHT // 2 - FONT_ERROR.getmetrics()[0]
-            draw.text((x, y), msg, font=FONT_ERROR, fill=ACCENT_RED)
-        else:
-            d = data if data else prev_data
-
-            prims = d.get("remaining_prims", 0)
-            status = d.get("status", "Unknown")
-            fps = d.get("fps", 0.0)
-            lag = d.get("lag", 0)
-
-            margin = 50
-            headerY = 80
-            statsY = 140
-            tableHeaderY = 220
-            rowHeight = 40
-            rowStartY = 270
-
-            draw.text((margin, headerY - FONT_LARGE.getmetrics()[0]), regionName.upper(), font=FONT_LARGE, fill=ACCENT_CYAN)
-            draw.line([(margin, headerY + 15), (WIDTH - margin, headerY + 15)], fill=ACCENT_CYAN, width=2)
-
-            labels = ["REMAINING PRIMS"]
-            values = [
-                str(prims)
-            ]
-
-            colWidth = (WIDTH - 2 * margin)
-
-            for i in range(1):
-                x = margin + (i * colWidth)
-                draw.text((x, statsY - FONT_LABEL.getmetrics()[0]), labels[i], font=FONT_LABEL, fill=ACCENT_YELLOW)
-
-                v_col = TEXT_MAIN
-                if i == 0 and prims < 100: v_col = ACCENT_RED
-                draw.text((x, statsY + 40 - FONT_VAL.getmetrics()[0]), values[i], font=FONT_VAL, fill=v_col)
-
-                # Render prim chart
-                if i == 0 and history and len(history) > 1:
-                    chartX = x + 250
-                    chartY = statsY - 10
-                    chartW = 200
-                    chartH = 50
-
-                    min_val = min(history)
-                    max_val = max(history)
-                    if max_val == min_val:
-                        min_val -= 10
-                        max_val += 10
-
-                    points = []
-                    size = len(history)
-                    for j, val in enumerate(history):
-                        px = chartX + (j / float(max(1, size - 1))) * chartW
-                        py = chartY + chartH - ((val - min_val) / float(max_val - min_val)) * chartH
-                        points.append((px, py))
-
-                    if len(points) > 1:
-                        # Draw filled polygon (using cyan with 50/255 alpha ~50 out of 255)
-                        poly_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
-                        poly_draw = ImageDraw.Draw(poly_img)
-                        poly_points = [(chartX, chartY + chartH)] + points + [(points[-1][0], chartY + chartH)]
-                        poly_draw.polygon(poly_points, fill=(ACCENT_CYAN[0], ACCENT_CYAN[1], ACCENT_CYAN[2], 50))
-                        img.alpha_composite(poly_img)
-
-                        # Draw outline
-                        draw.line(points, fill=ACCENT_CYAN, width=2)
-
-            draw.line([(margin, statsY + 55), (WIDTH - margin, statsY + 55)], fill=BORDER_COLOR, width=1)
-
+        if data or prev_data:
             cols = [50, 420, 560, 680, 800]
-            tableHeaders = ["ZONE", "OCCUPANCY", "DYNAMIC", "LI (EST)", "STATE"]
-
-            for i in range(len(tableHeaders)):
-                draw.text((cols[i], tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 5), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
-
-            draw.line([(margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25), (WIDTH - margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25)], fill=ACCENT_CYAN, width=1)
-
             if renderList:
                 globalProgress = f / (frames - 1) if frames > 1 else 1.0
                 slideProgress = min(1.0, f / 16.0) if frames > 1 else 1.0
@@ -597,17 +621,9 @@ def render_zone(data, prev_data, regionName, history):
 
                     img.alpha_composite(row_img)
 
-            draw.line([(0,0), (50,0)], fill=ACCENT_CYAN, width=4)
-            draw.line([(0,0), (0,50)], fill=ACCENT_CYAN, width=4)
-            draw.line([(WIDTH,0), (WIDTH-50,0)], fill=ACCENT_CYAN, width=4)
-            draw.line([(WIDTH,0), (WIDTH,50)], fill=ACCENT_CYAN, width=4)
-            draw.line([(0,HEIGHT), (50,HEIGHT)], fill=ACCENT_CYAN, width=4)
-            draw.line([(0,HEIGHT), (0,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
-            draw.line([(WIDTH,HEIGHT), (WIDTH-50,HEIGHT)], fill=ACCENT_CYAN, width=4)
-            draw.line([(WIDTH,HEIGHT), (WIDTH,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
-
         images.append(img.convert('RGB'))
     return images
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
@@ -627,7 +643,8 @@ async def render(request: Request, payload: RenderRequest):
         images = render_sim(data, prev_data, regionName)
 
     safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', regionName)
-    filename = f"{safe_name}_{render_type}.gif"
+    unique_id = uuid.uuid4().hex
+    filename = f"{safe_name}_{render_type}_{unique_id}.gif"
     filepath = os.path.join("static", filename)
 
     if images:
