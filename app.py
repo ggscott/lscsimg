@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import os
 import io
+import base64
 from fastapi.responses import Response
 import uuid
 from PIL import Image, ImageDraw, ImageFont
@@ -653,9 +654,11 @@ async def render(request: Request, payload: RenderRequest):
     else:
         images[0].save(img_io, format='GIF')
 
-    img_io.seek(0)
+    img_data = img_io.getvalue()
+    base64_encoded = base64.b64encode(img_data).decode('utf-8')
+    data_uri = f"data:image/gif;base64,{base64_encoded}"
 
-    return Response(content=img_io.getvalue(), media_type="image/gif")
+    return JSONResponse(content={"url": data_uri})
 
 if __name__ == "__main__":
     import uvicorn
