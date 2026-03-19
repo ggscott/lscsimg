@@ -286,7 +286,7 @@ def render_sim(data, prev_data, regionName):
                 if i == 3 and lag > 10: v_col = ACCENT_RED
                 draw.text((x, statsY + 40 - FONT_VAL.getmetrics()[0]), values[i], font=FONT_VAL, fill=v_col)
 
-            draw.line([(margin, statsY + 60), (WIDTH - margin, statsY + 60)], fill=BORDER_COLOR, width=1)
+            draw.line([(margin, statsY + 55), (WIDTH - margin, statsY + 55)], fill=BORDER_COLOR, width=1)
 
             cols = [50, 450, 650, 770, 890]
             tableHeaders = ["USER", "SCRIPTS (T/A)", "TIME", "MEMORY", "CMPLX"]
@@ -294,7 +294,7 @@ def render_sim(data, prev_data, regionName):
             for i in range(len(tableHeaders)):
                 draw.text((cols[i], tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 5), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
 
-            draw.line([(margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] + 20), (WIDTH - margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] + 20)], fill=ACCENT_CYAN, width=1)
+            draw.line([(margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25), (WIDTH - margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25)], fill=ACCENT_CYAN, width=1)
 
             if renderList:
                 globalProgress = f / (frames - 1) if frames > 1 else 1.0
@@ -517,7 +517,7 @@ def render_zone(data, prev_data, regionName, history):
                         # Draw outline
                         draw.line(points, fill=ACCENT_CYAN, width=2)
 
-            draw.line([(margin, statsY + 60), (WIDTH - margin, statsY + 60)], fill=BORDER_COLOR, width=1)
+            draw.line([(margin, statsY + 55), (WIDTH - margin, statsY + 55)], fill=BORDER_COLOR, width=1)
 
             cols = [50, 420, 560, 680, 800]
             tableHeaders = ["ZONE", "OCCUPANCY", "DYNAMIC", "LI (EST)", "STATE"]
@@ -525,7 +525,7 @@ def render_zone(data, prev_data, regionName, history):
             for i in range(len(tableHeaders)):
                 draw.text((cols[i], tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 5), tableHeaders[i], font=FONT_TBL_HDR, fill=ACCENT_CYAN)
 
-            draw.line([(margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 15), (WIDTH - margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] - 15)], fill=ACCENT_CYAN, width=1)
+            draw.line([(margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25), (WIDTH - margin, tableHeaderY - FONT_TBL_HDR.getmetrics()[0] +25)], fill=ACCENT_CYAN, width=1)
 
             if renderList:
                 globalProgress = f / (frames - 1) if frames > 1 else 1.0
@@ -584,7 +584,7 @@ def render_zone(data, prev_data, regionName, history):
 
                     draw_crossfade_text(row_draw, cols[4], textY, rZone.prevRezStatusText, rZone.rezStatusText, statusColor, globalProgress, FONT_ROW)
 
-                    row_draw.line([(margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] + 15), (WIDTH - margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] + 15)], fill=(40, 50, 60), width=1)
+                    row_draw.line([(margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] -15), (WIDTH - margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] -15)], fill=(40, 50, 60), width=1)
 
                     if alpha < 255:
                         row_img.putalpha(row_img.split()[3].point(lambda p: p * (alpha / 255.0)))
@@ -626,7 +626,7 @@ async def render(request: Request, payload: RenderRequest):
 
     if images:
         if len(images) > 1:
-            images[0].save(filepath, save_all=True, append_images=images[1:], duration=125, loop=1)
+            images[0].save(filepath, save_all=True, append_images=images[1:], duration=125)
         else:
             images[0].save(filepath)
 

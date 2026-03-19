@@ -182,7 +182,7 @@ def save_images(images, render_type):
     filepath = os.path.join("static", filename)
 
     if len(images) > 1:
-        images[0].save(filepath, save_all=True, append_images=images[1:], duration=125, loop=1)
+        images[0].save(filepath, save_all=True, append_images=images[1:], duration=125)
     else:
         images[0].save(filepath)
 
