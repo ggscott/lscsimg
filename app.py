@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+# from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import os
+import io
+from fastapi.responses import Response
 import uuid
 from PIL import Image, ImageDraw, ImageFont
 import math
@@ -14,8 +16,8 @@ import urllib.request
 app = FastAPI()
 
 # Ensure static directory exists
-os.makedirs("static", exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Removed static directory creation
+# Removed static mount
 
 WIDTH = 1024
 HEIGHT = 1024
@@ -642,24 +644,18 @@ async def render(request: Request, payload: RenderRequest):
     else:
         images = render_sim(data, prev_data, regionName)
 
-    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', regionName)
-    unique_id = uuid.uuid4().hex
-    filename = f"{safe_name}_{render_type}_{unique_id}.gif"
-    filepath = os.path.join("static", filename)
+    if not images:
+        return JSONResponse(status_code=500, content={"detail": "Failed to generate image."})
 
-    if images:
-        if len(images) > 1:
-            images[0].save(filepath, save_all=True, append_images=images[1:], duration=125)
-        else:
-            images[0].save(filepath)
+    img_io = io.BytesIO()
+    if len(images) > 1:
+        images[0].save(img_io, format='GIF', save_all=True, append_images=images[1:], duration=125, loop=0)
+    else:
+        images[0].save(img_io, format='GIF')
 
-    forwarded_proto = request.headers.get("x-forwarded-proto")
-    forwarded_host = request.headers.get("x-forwarded-host")
-    scheme = forwarded_proto if forwarded_proto else ("https" if request.url.scheme == "https" else "http")
-    host = forwarded_host if forwarded_host else request.headers.get("host", "localhost:8000")
-    base_url = f"{scheme}://{host}"
+    img_io.seek(0)
 
-    return JSONResponse(content={"url": f"{base_url}/static/{filename}"})
+    return Response(content=img_io.getvalue(), media_type="image/gif")
 
 if __name__ == "__main__":
     import uvicorn
