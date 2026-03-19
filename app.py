@@ -10,6 +10,8 @@ import io
 import base64
 from fastapi.responses import Response
 import uuid
+import hashlib
+import json
 from PIL import Image, ImageDraw, ImageFont
 import math
 from urllib.parse import urlparse
@@ -642,23 +644,22 @@ async def render(request: Request, payload: RenderRequest):
     render_type = payload.type
     primsHistory = payload.primsHistory
 
-    if render_type == "zone":
-        images = render_zone(data, prev_data, regionName, primsHistory)
-    else:
-        images = render_sim(data, prev_data, regionName)
-
-    if not images:
-        return JSONResponse(status_code=500, content={"detail": "Failed to generate image."})
-
     safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', regionName)
-    unique_id = uuid.uuid4().hex
-    filename = f"{safe_name}_{render_type}_{unique_id}.gif"
-    filepath = os.path.join("static", filename)
 
-    if len(images) > 1:
-        images[0].save(filepath, save_all=True, append_images=images[1:], duration=125, loop=0)
-    else:
-        images[0].save(filepath)
+    # Generate a deterministic hash based on the payload
+    payload_dict = {
+        "regionName": regionName,
+        "type": render_type,
+        "data": data,
+        "previousData": prev_data,
+        "primsHistory": primsHistory
+    }
+    payload_str = json.dumps(payload_dict, sort_keys=True)
+    payload_hash = hashlib.md5(payload_str.encode('utf-8')).hexdigest()
+
+    filename = f"{safe_name}_{render_type}_{payload_hash}.gif"
+    filepath = os.path.join("static", filename)
+    lock_filepath = os.path.join("static", f"{filename}.lock")
 
     forwarded_proto = request.headers.get("x-forwarded-proto")
     forwarded_host = request.headers.get("x-forwarded-host")
@@ -666,7 +667,44 @@ async def render(request: Request, payload: RenderRequest):
     host = forwarded_host if forwarded_host else request.headers.get("host", "localhost:8000")
     base_url = f"{scheme}://{host}"
 
-    return JSONResponse(content={"url": f"{base_url}/static/{filename}"})
+    response_json = {"url": f"{base_url}/static/{filename}"}
+
+    # 1. If the fully generated GIF already exists, we are done!
+    if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+        return JSONResponse(content=response_json)
+
+    # 2. Try to acquire an exclusive file lock to generate it
+    try:
+        # os.O_CREAT | os.O_EXCL ensures this is an atomic operation.
+        # If the file exists, it raises a FileExistsError.
+        fd = os.open(lock_filepath, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+
+        try:
+            # We got the lock! We are the chosen pod to render the GIF.
+            if render_type == "zone":
+                images = render_zone(data, prev_data, regionName, primsHistory)
+            else:
+                images = render_sim(data, prev_data, regionName)
+
+            if images:
+                if len(images) > 1:
+                    images[0].save(filepath, save_all=True, append_images=images[1:], duration=125, loop=0)
+                else:
+                    images[0].save(filepath)
+        finally:
+            # Always close the file descriptor and remove the lock when done,
+            # even if an exception occurs during rendering.
+            os.close(fd)
+            if os.path.exists(lock_filepath):
+                os.remove(lock_filepath)
+
+    except FileExistsError:
+        # 3. Another pod/thread is already generating this exact GIF!
+        # We don't need to do any work. The client will GET the file,
+        # and our 30-second polling loop in the GET endpoint will handle the wait.
+        pass
+
+    return JSONResponse(content=response_json)
 
 @app.get("/static/{filename}")
 async def get_static_file(filename: str):
@@ -676,8 +714,8 @@ async def get_static_file(filename: str):
     if not os.path.abspath(filepath).startswith(os.path.abspath("static")):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # Poll up to 15 times, waiting 1 second between checks
-    for _ in range(15):
+    # Poll up to 30 times, waiting 1 second between checks
+    for _ in range(30):
         if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
             return FileResponse(filepath, media_type="image/gif")
         await asyncio.sleep(1.0)
