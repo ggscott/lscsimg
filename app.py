@@ -319,10 +319,15 @@ def render_sim(data, prev_data, regionName):
                         if pulseProgress > 0:
                             box_alpha = int(60 * pulseProgress)
                             box_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], box_alpha)
-                            draw.rectangle([margin - 10, currentY - 5, WIDTH - margin + 10, currentY + rowHeight - 5], fill=box_fill)
+                            # Align between the row separator line above and the line below, with padding
+                            # Line above: currentY - FONT_ROW.getmetrics()[0] - 15
+                            # Line below: currentY + rowHeight - FONT_ROW.getmetrics()[0] - 15
+                            box_top = currentY - FONT_ROW.getmetrics()[0] - 13
+                            box_bottom = currentY + rowHeight - FONT_ROW.getmetrics()[0] - 17
+                            draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], fill=box_fill)
                             outline_alpha = int(180 * pulseProgress)
                             outline_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], outline_alpha)
-                            draw.rectangle([margin - 10, currentY - 5, WIDTH - margin + 10, currentY + rowHeight - 5], outline=outline_fill)
+                            draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], outline=outline_fill)
                     elif rUser.isRemoved:
                         alpha = int(255 * min(1.0, max(0.0, 1.0 - slideProgress)))
 
