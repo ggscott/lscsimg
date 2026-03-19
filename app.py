@@ -327,8 +327,8 @@ def render_sim(data, prev_data, regionName):
                 slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
 
                 pulseProgress = 0.0
-                if frames > 1 and f >= 4:
-                    pulsePhase = (f - 3) / 5.0
+                if frames > 1 and f >= 2:
+                    pulsePhase = (f - 1) / 7.0
                     pulseProgress = math.sin(pulsePhase * math.pi)
 
                 for rUser in renderList:
@@ -346,12 +346,12 @@ def render_sim(data, prev_data, regionName):
                     if rUser.isNew:
                         alpha = int(255 * min(1.0, max(0.0, slideProgress)))
                         if pulseProgress > 0:
-                            box_alpha = int(60 * pulseProgress)
+                            box_alpha = int(120 * pulseProgress)
                             box_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], box_alpha)
                             box_top = currentY - FONT_ROW.getmetrics()[0] - 13
                             box_bottom = currentY + rowHeight - FONT_ROW.getmetrics()[0] - 17
                             row_draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], fill=box_fill)
-                            outline_alpha = int(180 * pulseProgress)
+                            outline_alpha = int(255 * pulseProgress)
                             outline_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], outline_alpha)
                             row_draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], outline=outline_fill)
                     elif rUser.isRemoved:
