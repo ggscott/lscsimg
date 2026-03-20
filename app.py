@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, Response
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import os
@@ -720,6 +720,10 @@ async def stream_generator(safe_name: str, render_type: str):
     finally:
         await pubsub.unsubscribe(channel_name)
         await pubsub.close()
+
+@app.head("/stream/{region_name}/{render_type}")
+async def head_stream(region_name: str, render_type: str):
+    return Response(media_type="multipart/x-mixed-replace; boundary=frame")
 
 @app.get("/stream/{region_name}/{render_type}")
 async def get_stream(region_name: str, render_type: str):
