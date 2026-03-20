@@ -1,28 +1,22 @@
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, FileResponse
-# from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import os
-import time
 import asyncio
 import io
-import base64
-from fastapi.responses import Response
-import uuid
-import hashlib
 import json
 from PIL import Image, ImageDraw, ImageFont
 import math
-from urllib.parse import urlparse
 import re
 import urllib.request
+import redis.asyncio as redis
 
 app = FastAPI()
 
-# Ensure static directory exists
-os.makedirs("static", exist_ok=True)
-# Removed static mount
+# Redis Configuration
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+redis_client = redis.from_url(REDIS_URL)
 
 WIDTH = 1024
 HEIGHT = 1024
@@ -645,21 +639,8 @@ async def render(request: Request, payload: RenderRequest):
     primsHistory = payload.primsHistory
 
     safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', regionName)
-
-    # Generate a deterministic hash based on the payload
-    payload_dict = {
-        "regionName": regionName,
-        "type": render_type,
-        "data": data,
-        "previousData": prev_data,
-        "primsHistory": primsHistory
-    }
-    payload_str = json.dumps(payload_dict, sort_keys=True)
-    payload_hash = hashlib.md5(payload_str.encode('utf-8')).hexdigest()
-
-    filename = f"{safe_name}_{render_type}_{payload_hash}.gif"
-    filepath = os.path.join("static", filename)
-    lock_filepath = os.path.join("static", f"{filename}.lock")
+    channel_name = f"region:{safe_name}"
+    latest_key = f"latest:{safe_name}"
 
     forwarded_proto = request.headers.get("x-forwarded-proto")
     forwarded_host = request.headers.get("x-forwarded-host")
@@ -667,60 +648,86 @@ async def render(request: Request, payload: RenderRequest):
     host = forwarded_host if forwarded_host else request.headers.get("host", "localhost:8000")
     base_url = f"{scheme}://{host}"
 
-    response_json = {"url": f"{base_url}/static/{filename}"}
+    # Generate the frames
+    if render_type == "zone":
+        images = render_zone(data, prev_data, regionName, primsHistory)
+    else:
+        images = render_sim(data, prev_data, regionName)
 
-    # 1. If the fully generated GIF already exists, we are done!
-    if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-        return JSONResponse(content=response_json)
+    if images:
+        for img in images:
+            # Convert frame to JPEG
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='JPEG', quality=85)
+            img_bytes = img_byte_arr.getvalue()
 
-    # 2. Try to acquire an exclusive file lock to generate it
-    try:
-        # os.O_CREAT | os.O_EXCL ensures this is an atomic operation.
-        # If the file exists, it raises a FileExistsError.
-        fd = os.open(lock_filepath, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            # Publish frame to Redis channel
+            await redis_client.publish(channel_name, img_bytes)
 
-        try:
-            # We got the lock! We are the chosen pod to render the GIF.
-            if render_type == "zone":
-                images = render_zone(data, prev_data, regionName, primsHistory)
-            else:
-                images = render_sim(data, prev_data, regionName)
+            # Wait briefly between frames to match animation timing (approx 8fps like 125ms duration)
+            if len(images) > 1:
+                await asyncio.sleep(0.125)
 
-            if images:
-                if len(images) > 1:
-                    images[0].save(filepath, save_all=True, append_images=images[1:], duration=125)
-                else:
-                    images[0].save(filepath)
-        finally:
-            # Always close the file descriptor and remove the lock when done,
-            # even if an exception occurs during rendering.
-            os.close(fd)
-            if os.path.exists(lock_filepath):
-                os.remove(lock_filepath)
+        # Store the very last frame as the "latest" state for new connections
+        img_byte_arr = io.BytesIO()
+        images[-1].save(img_byte_arr, format='JPEG', quality=85)
+        latest_img_bytes = img_byte_arr.getvalue()
+        await redis_client.set(latest_key, latest_img_bytes)
 
-    except FileExistsError:
-        # 3. Another pod/thread is already generating this exact GIF!
-        # We don't need to do any work. The client will GET the file,
-        # and our 30-second polling loop in the GET endpoint will handle the wait.
-        pass
-
+    # Return the permanent stream URL for this region
+    response_json = {"url": f"{base_url}/stream/{safe_name}"}
     return JSONResponse(content=response_json)
 
-@app.get("/static/{filename}")
-async def get_static_file(filename: str):
-    filepath = os.path.join("static", filename)
+async def stream_generator(safe_name: str):
+    channel_name = f"region:{safe_name}"
+    latest_key = f"latest:{safe_name}"
 
-    # Prevent directory traversal
-    if not os.path.abspath(filepath).startswith(os.path.abspath("static")):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    pubsub = redis_client.pubsub()
+    await pubsub.subscribe(channel_name)
 
-    # Poll up to 30 times, waiting 1 second between checks
-    for _ in range(30):
-        if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-            return FileResponse(filepath, media_type="image/gif")
-        await asyncio.sleep(1.0)
+    try:
+        # First, try to send the latest cached frame immediately so the client sees something right away
+        latest_frame = await redis_client.get(latest_key)
+        if latest_frame:
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + latest_frame + b"\r\n"
+            )
+        else:
+            # If no latest frame, generate a placeholder
+            placeholder = Image.new('RGB', (WIDTH, HEIGHT), BG_COLOR)
+            draw = ImageDraw.Draw(placeholder)
+            msg = f"WAITING FOR DATA: {safe_name}"
+            tw = draw.textlength(msg, font=FONT_ERROR) if hasattr(draw, 'textlength') else FONT_ERROR.getsize(msg)[0]
+            draw.text(((WIDTH - tw) // 2, HEIGHT // 2), msg, font=FONT_ERROR, fill=ACCENT_CYAN)
+            img_byte_arr = io.BytesIO()
+            placeholder.save(img_byte_arr, format='JPEG', quality=85)
+            placeholder_bytes = img_byte_arr.getvalue()
 
-    raise HTTPException(status_code=404, detail="File not found")
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + placeholder_bytes + b"\r\n"
+            )
+
+        # Then listen for new frames published to the channel
+        async for message in pubsub.listen():
+            if message['type'] == 'message':
+                frame_data = message['data']
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n" + frame_data + b"\r\n"
+                )
+    finally:
+        await pubsub.unsubscribe(channel_name)
+        await pubsub.close()
+
+@app.get("/stream/{region_name}")
+async def get_stream(region_name: str):
+    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', region_name)
+    return StreamingResponse(
+        stream_generator(safe_name),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
 
 if __name__ == "__main__":
     import uvicorn
