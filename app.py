@@ -639,8 +639,8 @@ async def render(request: Request, payload: RenderRequest):
     primsHistory = payload.primsHistory
 
     safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', regionName)
-    channel_name = f"region:{safe_name}"
-    latest_key = f"latest:{safe_name}"
+    channel_name = f"region:{safe_name}:{render_type}"
+    latest_key = f"latest:{safe_name}:{render_type}"
 
     forwarded_proto = request.headers.get("x-forwarded-proto")
     forwarded_host = request.headers.get("x-forwarded-host")
@@ -675,12 +675,12 @@ async def render(request: Request, payload: RenderRequest):
         await redis_client.set(latest_key, latest_img_bytes)
 
     # Return the permanent stream URL for this region
-    response_json = {"url": f"{base_url}/stream/{safe_name}"}
+    response_json = {"url": f"{base_url}/stream/{safe_name}/{render_type}"}
     return JSONResponse(content=response_json)
 
-async def stream_generator(safe_name: str):
-    channel_name = f"region:{safe_name}"
-    latest_key = f"latest:{safe_name}"
+async def stream_generator(safe_name: str, render_type: str):
+    channel_name = f"region:{safe_name}:{render_type}"
+    latest_key = f"latest:{safe_name}:{render_type}"
 
     pubsub = redis_client.pubsub()
     await pubsub.subscribe(channel_name)
@@ -697,7 +697,7 @@ async def stream_generator(safe_name: str):
             # If no latest frame, generate a placeholder
             placeholder = Image.new('RGB', (WIDTH, HEIGHT), BG_COLOR)
             draw = ImageDraw.Draw(placeholder)
-            msg = f"WAITING FOR DATA: {safe_name}"
+            msg = f"WAITING FOR DATA: {safe_name.upper()} ({render_type.upper()})"
             tw = draw.textlength(msg, font=FONT_ERROR) if hasattr(draw, 'textlength') else FONT_ERROR.getsize(msg)[0]
             draw.text(((WIDTH - tw) // 2, HEIGHT // 2), msg, font=FONT_ERROR, fill=ACCENT_CYAN)
             img_byte_arr = io.BytesIO()
@@ -721,11 +721,12 @@ async def stream_generator(safe_name: str):
         await pubsub.unsubscribe(channel_name)
         await pubsub.close()
 
-@app.get("/stream/{region_name}")
-async def get_stream(region_name: str):
+@app.get("/stream/{region_name}/{render_type}")
+async def get_stream(region_name: str, render_type: str):
     safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', region_name)
+    safe_type = re.sub(r'[^a-zA-Z0-9_\-]', '_', render_type)
     return StreamingResponse(
-        stream_generator(safe_name),
+        stream_generator(safe_name, safe_type),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
 
