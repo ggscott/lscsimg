@@ -648,31 +648,62 @@ async def render(request: Request, payload: RenderRequest):
     host = forwarded_host if forwarded_host else request.headers.get("host", "localhost:8000")
     base_url = f"{scheme}://{host}"
 
+    lock_key = f"lock:{safe_name}:{render_type}"
+
     # Generate the frames
     if render_type == "zone":
         images = render_zone(data, prev_data, regionName, primsHistory)
     else:
         images = render_sim(data, prev_data, regionName)
 
-    if images:
-        for img in images:
-            # Convert frame to JPEG
-            img_byte_arr = io.BytesIO()
-            img.save(img_byte_arr, format='JPEG', quality=85)
-            img_bytes = img_byte_arr.getvalue()
+    async def render_and_publish():
+        # Acquire lock to prevent race conditions during animation
+        # If we can't get the lock, it means another update is actively animating
+        # In a real scenario we might queue or cancel, but for now we skip
+        # or we could just wait for the lock.
+        # Actually, let's just forcefully take over or skip.
+        # If we skip, the viewer misses an update.
+        # A simple approach: use set(nx=True) with a timeout.
+        lock_acquired = await redis_client.set(lock_key, "1", nx=True, ex=2)
+        if not lock_acquired:
+            # Another publish is in progress for this region. We can either:
+            # 1. Skip this update
+            # 2. Wait and retry
+            # Let's just wait a bit and retry up to a few times
+            for _ in range(5):
+                await asyncio.sleep(0.2)
+                lock_acquired = await redis_client.set(lock_key, "1", nx=True, ex=2)
+                if lock_acquired:
+                    break
 
-            # Publish frame to Redis channel
-            await redis_client.publish(channel_name, img_bytes)
+            if not lock_acquired:
+                return # Skip this render to avoid interleaving frames
 
-            # Wait briefly between frames to match animation timing (approx 8fps like 125ms duration)
-            if len(images) > 1:
-                await asyncio.sleep(0.125)
+        try:
+            if images:
+                for img in images:
+                    # Convert frame to JPEG
+                    img_byte_arr = io.BytesIO()
+                    img.save(img_byte_arr, format='JPEG', quality=85)
+                    img_bytes = img_byte_arr.getvalue()
 
-        # Store the very last frame as the "latest" state for new connections
-        img_byte_arr = io.BytesIO()
-        images[-1].save(img_byte_arr, format='JPEG', quality=85)
-        latest_img_bytes = img_byte_arr.getvalue()
-        await redis_client.set(latest_key, latest_img_bytes)
+                    # Publish frame to Redis channel
+                    await redis_client.publish(channel_name, img_bytes)
+
+                    # Wait briefly between frames to match animation timing (approx 8fps like 125ms duration)
+                    if len(images) > 1:
+                        await asyncio.sleep(0.125)
+
+                # Store the very last frame as the "latest" state for new connections
+                img_byte_arr = io.BytesIO()
+                images[-1].save(img_byte_arr, format='JPEG', quality=85)
+                latest_img_bytes = img_byte_arr.getvalue()
+                await redis_client.set(latest_key, latest_img_bytes)
+        finally:
+            await redis_client.delete(lock_key)
+
+    # Start the rendering/publishing in the background
+    asyncio.create_task(render_and_publish())
 
     # Return the permanent stream URL for this region
     response_json = {"url": f"{base_url}/stream/{safe_name}/{render_type}"}
@@ -691,7 +722,9 @@ async def stream_generator(safe_name: str, render_type: str):
         if latest_frame:
             yield (
                 b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n" + latest_frame + b"\r\n"
+                b"Content-Type: image/jpeg\r\n"
+                b"Content-Length: " + str(len(latest_frame)).encode() + b"\r\n\r\n" +
+                latest_frame + b"\r\n"
             )
         else:
             # If no latest frame, generate a placeholder
@@ -706,7 +739,9 @@ async def stream_generator(safe_name: str, render_type: str):
 
             yield (
                 b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n" + placeholder_bytes + b"\r\n"
+                b"Content-Type: image/jpeg\r\n"
+                b"Content-Length: " + str(len(placeholder_bytes)).encode() + b"\r\n\r\n" +
+                placeholder_bytes + b"\r\n"
             )
 
         # Then listen for new frames published to the channel
@@ -715,7 +750,9 @@ async def stream_generator(safe_name: str, render_type: str):
                 frame_data = message['data']
                 yield (
                     b"--frame\r\n"
-                    b"Content-Type: image/jpeg\r\n\r\n" + frame_data + b"\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(len(frame_data)).encode() + b"\r\n\r\n" +
+                    frame_data + b"\r\n"
                 )
     finally:
         await pubsub.unsubscribe(channel_name)
