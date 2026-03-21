@@ -741,9 +741,14 @@ async def stream_generator(safe_name: str, render_type: str):
                 placeholder_bytes + b"\r\n"
             )
 
-        # Then listen for new frames published to the channel
-        async for message in pubsub.listen():
-            if message['type'] == 'message':
+        # Then listen for new frames published to the channel with a timeout
+        # If no new frames arrive within 5 seconds, send a keep-alive frame
+        # (the latest cached frame) to prevent the MoaP browser or proxy from timing out.
+        while True:
+            # get_message with timeout will block up to timeout seconds
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=5.0)
+
+            if message and message['type'] == 'message':
                 frame_data = message['data']
                 yield (
                     b"--frame\r\n"
@@ -751,6 +756,16 @@ async def stream_generator(safe_name: str, render_type: str):
                     b"Content-Length: " + str(len(frame_data)).encode() + b"\r\n\r\n" +
                     frame_data + b"\r\n"
                 )
+            elif message is None:
+                # Timeout reached, send a keep-alive heartbeat
+                heartbeat_frame = await redis_client.get(latest_key)
+                if heartbeat_frame:
+                    yield (
+                        b"--frame\r\n"
+                        b"Content-Type: image/jpeg\r\n"
+                        b"Content-Length: " + str(len(heartbeat_frame)).encode() + b"\r\n\r\n" +
+                        heartbeat_frame + b"\r\n"
+                    )
     finally:
         await pubsub.unsubscribe(channel_name)
         await pubsub.close()
