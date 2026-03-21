@@ -6,6 +6,7 @@ import os
 import asyncio
 import io
 import json
+import uuid
 from PIL import Image, ImageDraw, ImageFont
 import math
 import re
@@ -651,11 +652,15 @@ async def render(request: Request, payload: RenderRequest):
     lock_key = f"lock:{safe_name}:{render_type}"
 
     async def render_and_publish():
+        # Generate a unique lock value so we only delete our own lock
+        lock_val = uuid.uuid4().hex
+
         # Acquire lock to prevent race conditions during animation
         # If we can't get the lock, it means another update is actively animating.
         # Since updates are frequent (e.g., every 1s from multiple users), we simply
         # skip this render to avoid queuing up stale updates and interleaving frames.
-        lock_acquired = await redis_client.set(lock_key, "1", nx=True, ex=2)
+        # Increased timeout to 5s to ensure the 1s+ animation process never exceeds it.
+        lock_acquired = await redis_client.set(lock_key, lock_val, nx=True, ex=5)
         if not lock_acquired:
             return # Skip this render immediately
 
@@ -689,7 +694,10 @@ async def render(request: Request, payload: RenderRequest):
                 latest_img_bytes = img_byte_arr.getvalue()
                 await redis_client.set(latest_key, latest_img_bytes)
         finally:
-            await redis_client.delete(lock_key)
+            # Safe delete: Only delete the lock if it still belongs to this task
+            current_lock_val = await redis_client.get(lock_key)
+            if current_lock_val and current_lock_val.decode('utf-8') == lock_val:
+                await redis_client.delete(lock_key)
 
     # Start the rendering/publishing in the background
     asyncio.create_task(render_and_publish())
