@@ -650,36 +650,25 @@ async def render(request: Request, payload: RenderRequest):
 
     lock_key = f"lock:{safe_name}:{render_type}"
 
-    # Generate the frames
-    if render_type == "zone":
-        images = render_zone(data, prev_data, regionName, primsHistory)
-    else:
-        images = render_sim(data, prev_data, regionName)
-
     async def render_and_publish():
         # Acquire lock to prevent race conditions during animation
-        # If we can't get the lock, it means another update is actively animating
-        # In a real scenario we might queue or cancel, but for now we skip
-        # or we could just wait for the lock.
-        # Actually, let's just forcefully take over or skip.
-        # If we skip, the viewer misses an update.
-        # A simple approach: use set(nx=True) with a timeout.
+        # If we can't get the lock, it means another update is actively animating.
+        # Since updates are frequent (e.g., every 1s from multiple users), we simply
+        # skip this render to avoid queuing up stale updates and interleaving frames.
         lock_acquired = await redis_client.set(lock_key, "1", nx=True, ex=2)
         if not lock_acquired:
-            # Another publish is in progress for this region. We can either:
-            # 1. Skip this update
-            # 2. Wait and retry
-            # Let's just wait a bit and retry up to a few times
-            for _ in range(5):
-                await asyncio.sleep(0.2)
-                lock_acquired = await redis_client.set(lock_key, "1", nx=True, ex=2)
-                if lock_acquired:
-                    break
-
-            if not lock_acquired:
-                return # Skip this render to avoid interleaving frames
+            return # Skip this render immediately
 
         try:
+            # Generate the frames only after acquiring the lock to prevent blocking the
+            # event loop with expensive PIL operations for updates that will be discarded.
+            if render_type == "zone":
+                # CPU bound rendering, but running in async task for now.
+                # (Ideally use run_in_executor for heavy CPU load)
+                images = render_zone(data, prev_data, regionName, primsHistory)
+            else:
+                images = render_sim(data, prev_data, regionName)
+
             if images:
                 for img in images:
                     # Convert frame to JPEG
