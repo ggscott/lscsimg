@@ -660,7 +660,7 @@ async def render(request: Request, payload: RenderRequest):
         # Since updates are frequent (e.g., every 1s from multiple users), we simply
         # skip this render to avoid queuing up stale updates and interleaving frames.
         # Increased timeout to 5s to ensure the 1s+ animation process never exceeds it.
-        lock_acquired = await redis_client.set(lock_key, lock_val, nx=True, ex=5)
+        lock_acquired = await redis_client.set(lock_key, lock_val, nx=True, ex=10)
         if not lock_acquired:
             return # Skip this render immediately
 
