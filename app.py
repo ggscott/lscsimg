@@ -6,6 +6,7 @@ import os
 import asyncio
 import io
 import json
+import time
 import uuid
 from PIL import Image, ImageDraw, ImageFont
 import math
@@ -502,37 +503,6 @@ def render_zone(data, prev_data, regionName, history):
             if i == 0 and prims < 100: v_col = ACCENT_RED
             base_draw.text((x, statsY + 40 - FONT_VAL.getmetrics()[0]), values[i], font=FONT_VAL, fill=v_col)
 
-            # Render prim chart
-            if i == 0 and history and len(history) > 1:
-                chartX = x + 250
-                chartY = statsY - 10
-                chartW = 200
-                chartH = 50
-
-                min_val = min(history)
-                max_val = max(history)
-                if max_val == min_val:
-                    min_val -= 10
-                    max_val += 10
-
-                points = []
-                size = len(history)
-                for j, val in enumerate(history):
-                    px = chartX + (j / float(max(1, size - 1))) * chartW
-                    py = chartY + chartH - ((val - min_val) / float(max_val - min_val)) * chartH
-                    points.append((px, py))
-
-                if len(points) > 1:
-                    # Draw filled polygon (using cyan with 50/255 alpha ~50 out of 255)
-                    poly_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
-                    poly_draw = ImageDraw.Draw(poly_img)
-                    poly_points = [(chartX, chartY + chartH)] + points + [(points[-1][0], chartY + chartH)]
-                    poly_draw.polygon(poly_points, fill=(ACCENT_CYAN[0], ACCENT_CYAN[1], ACCENT_CYAN[2], 50))
-                    base_img.alpha_composite(poly_img)
-
-                    # Draw outline
-                    base_draw.line(points, fill=ACCENT_CYAN, width=2)
-
         base_draw.line([(margin, statsY + 55), (WIDTH - margin, statsY + 55)], fill=BORDER_COLOR, width=1)
 
         cols = [50, 420, 560, 680, 800]
@@ -558,6 +528,63 @@ def render_zone(data, prev_data, regionName, history):
         draw = ImageDraw.Draw(img)
 
         if data or prev_data:
+            # Render prim chart and animated axis
+            if history and len(history) > 1:
+                colWidth = (WIDTH - 2 * margin)
+                x = margin + (0 * colWidth)
+                chartX = x + 250
+                chartY = statsY - 10
+                chartW = 200
+                chartH = 50
+
+                min_val = min(history)
+                max_val = max(history)
+                if max_val == min_val:
+                    min_val -= 10
+                    max_val += 10
+
+                points = []
+                size = len(history)
+                for j, val in enumerate(history):
+                    px = chartX + (j / float(max(1, size - 1))) * chartW
+                    py = chartY + chartH - ((val - min_val) / float(max_val - min_val)) * chartH
+                    points.append((px, py))
+
+                if len(points) > 1:
+                    # Draw filled polygon (using cyan with 50/255 alpha ~50 out of 255)
+                    poly_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+                    poly_draw = ImageDraw.Draw(poly_img)
+                    poly_points = [(chartX, chartY + chartH)] + points + [(points[-1][0], chartY + chartH)]
+                    poly_draw.polygon(poly_points, fill=(ACCENT_CYAN[0], ACCENT_CYAN[1], ACCENT_CYAN[2], 50))
+                    img.alpha_composite(poly_img)
+
+                    # Draw outline
+                    draw.line(points, fill=ACCENT_CYAN, width=2)
+
+                # Animated Scrolling Time Axis Logic
+                baseTime = time.time()
+                frameProgress = f / frames if frames > 1 else 0
+                timeOffset = (baseTime + frameProgress) * 20.0  # multiplier controls scroll speed
+
+                tickSpacing = 15
+                tickHeight = 5
+                offset_mod = timeOffset % tickSpacing
+
+                # Draw ticks
+                for tick in range(0, chartW + tickSpacing, tickSpacing):
+                    tickX = chartX + tick - offset_mod
+                    if chartX <= tickX <= chartX + chartW:
+                        draw.line([(tickX, chartY + chartH - tickHeight), (tickX, chartY + chartH)], fill=BORDER_COLOR, width=1)
+
+                # Draw subtle scanner effect if animating
+                if frames > 1:
+                    scanX = chartX + ((timeOffset * 2) % chartW)
+                    if chartX <= scanX <= chartX + chartW:
+                        scan_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+                        scan_draw = ImageDraw.Draw(scan_img)
+                        scan_draw.line([(scanX, chartY), (scanX, chartY + chartH)], fill=(ACCENT_CYAN[0], ACCENT_CYAN[1], ACCENT_CYAN[2], 100), width=1)
+                        img.paste(scan_img, (0, 0), scan_img)
+
             cols = [50, 420, 560, 680, 800]
             if renderList:
                 globalProgress = f / (frames - 1) if frames > 1 else 1.0
