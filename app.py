@@ -13,8 +13,20 @@ import math
 import re
 import urllib.request
 import redis.asyncio as redis
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+# Global process pool executor
+executor = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global executor
+    executor = ProcessPoolExecutor()
+    yield
+    executor.shutdown(wait=True)
+
+app = FastAPI(lifespan=lifespan)
 
 # Redis Configuration
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
@@ -193,7 +205,43 @@ def draw_crossfade_text(draw, x, y, oldText, newText, baseColor, progress, font)
         currentX += charWidth
 
 
-def render_sim(data, prev_data, regionName):
+def get_sim_frames_count(data, prev_data):
+    prevList = []
+    if prev_data and "users" in prev_data:
+        for u in prev_data["users"]:
+            prevList.append(RenderableUser(u, True))
+        prevList.sort(key=lambda u: (u.category, u.nameToDisplay.lower()))
+        for i, u in enumerate(prevList):
+            u.prevIndex = i
+
+    currentList = []
+    if data and "users" in data:
+        for u in data["users"]:
+            currentList.append(RenderableUser(u, False))
+        currentList.sort(key=lambda u: (u.category, u.nameToDisplay.lower()))
+        for i, u in enumerate(currentList):
+            u.targetIndex = i
+
+    for cu in currentList:
+        pu = next((p for p in prevList if (p.uuid == cu.uuid and p.uuid) or (not p.uuid and p.nameToDisplay == cu.nameToDisplay)), None)
+        if pu:
+            if (cu.scriptsText != pu.scriptsText or
+                cu.timeText != pu.timeText or
+                cu.memoryText != pu.memoryText or
+                cu.complexityText != pu.complexityText or
+                pu.prevIndex != cu.targetIndex):
+                return 8
+        else:
+            return 8
+
+    for pu in prevList:
+        found = any((cu.uuid == pu.uuid and pu.uuid) or (not pu.uuid and cu.nameToDisplay == pu.nameToDisplay) for cu in currentList)
+        if not found:
+            return 8
+
+    return 1
+
+def render_sim_frame(f, frames, data, prev_data, regionName):
     prevList = []
     if prev_data and "users" in prev_data:
         for u in prev_data["users"]:
@@ -235,12 +283,6 @@ def render_sim(data, prev_data, regionName):
             pu.isRemoved = True
             pu.targetIndex = pu.prevIndex
             renderList.append(pu)
-
-    anyChanges = any(ru.isNew or ru.isRemoved or ru.scriptsChanged or ru.timeChanged or ru.memoryChanged or ru.complexityChanged or ru.prevIndex != ru.targetIndex for ru in renderList)
-
-    frames = 8 if anyChanges else 1
-
-    images = []
 
     # PRE-RENDER BASE IMAGE
     base_img = Image.new('RGBA', (WIDTH, HEIGHT), BG_COLOR)
@@ -311,105 +353,141 @@ def render_sim(data, prev_data, regionName):
         base_draw.line([(WIDTH,HEIGHT), (WIDTH-50,HEIGHT)], fill=ACCENT_CYAN, width=4)
         base_draw.line([(WIDTH,HEIGHT), (WIDTH,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
 
-    for f in range(frames):
-        img = base_img.copy()
-        draw = ImageDraw.Draw(img)
+    img = base_img.copy()
+    draw = ImageDraw.Draw(img)
 
-        if data or prev_data:
-            cols = [50, 450, 650, 770, 890]
-            if renderList:
-                globalProgress = f / (frames - 1) if frames > 1 else 1.0
-                slideProgress = min(1.0, f / 4.0) if frames > 1 else 1.0
-                slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
+    if data or prev_data:
+        cols = [50, 450, 650, 770, 890]
+        if renderList:
+            globalProgress = f / (frames - 1) if frames > 1 else 1.0
+            slideProgress = min(1.0, f / 4.0) if frames > 1 else 1.0
+            slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
 
-                pulseProgress = 0.0
-                if frames > 1 and f >= 2:
-                    pulsePhase = (f - 1) / 7.0
-                    pulseProgress = math.sin(pulsePhase * math.pi)
+            pulseProgress = 0.0
+            if frames > 1 and f >= 2:
+                pulsePhase = (f - 1) / 7.0
+                pulseProgress = math.sin(pulsePhase * math.pi)
 
-                for rUser in renderList:
-                    prevY = rowStartY + rUser.prevIndex * rowHeight
-                    targetY = rowStartY + rUser.targetIndex * rowHeight
-                    currentY = int(prevY + (targetY - prevY) * slideProgress)
+            for rUser in renderList:
+                prevY = rowStartY + rUser.prevIndex * rowHeight
+                targetY = rowStartY + rUser.targetIndex * rowHeight
+                currentY = int(prevY + (targetY - prevY) * slideProgress)
 
-                    if currentY > HEIGHT - 20 and prevY > HEIGHT - 20: continue
+                if currentY > HEIGHT - 20 and prevY > HEIGHT - 20: continue
 
-                    alpha = 255
+                alpha = 255
 
-                    row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
-                    row_draw = ImageDraw.Draw(row_img)
+                row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+                row_draw = ImageDraw.Draw(row_img)
 
-                    if rUser.isNew:
-                        alpha = int(255 * min(1.0, max(0.0, slideProgress)))
-                        if pulseProgress > 0:
-                            box_alpha = int(120 * pulseProgress)
-                            box_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], box_alpha)
-                            box_top = currentY - FONT_ROW.getmetrics()[0] - 13
-                            box_bottom = currentY + rowHeight - FONT_ROW.getmetrics()[0] - 17
-                            row_draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], fill=box_fill)
-                            outline_alpha = int(255 * pulseProgress)
-                            outline_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], outline_alpha)
-                            row_draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], outline=outline_fill)
-                    elif rUser.isRemoved:
-                        alpha = int(255 * min(1.0, max(0.0, 1.0 - slideProgress)))
+                if rUser.isNew:
+                    alpha = int(255 * min(1.0, max(0.0, slideProgress)))
+                    if pulseProgress > 0:
+                        box_alpha = int(120 * pulseProgress)
+                        box_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], box_alpha)
+                        box_top = currentY - FONT_ROW.getmetrics()[0] - 13
+                        box_bottom = currentY + rowHeight - FONT_ROW.getmetrics()[0] - 17
+                        row_draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], fill=box_fill)
+                        outline_alpha = int(255 * pulseProgress)
+                        outline_fill = (ACCENT_GREEN[0], ACCENT_GREEN[1], ACCENT_GREEN[2], outline_alpha)
+                        row_draw.rectangle([margin - 10, box_top, WIDTH - margin + 10, box_bottom], outline=outline_fill)
+                elif rUser.isRemoved:
+                    alpha = int(255 * min(1.0, max(0.0, 1.0 - slideProgress)))
 
-                    name = rUser.nameToDisplay
-                    currentX = cols[0]
+                name = rUser.nameToDisplay
+                currentX = cols[0]
 
-                    textY = currentY - FONT_ROW.getmetrics()[0] - 5
-                    if rUser.isOOC:
-                        row_draw.text((currentX, textY), "OOC:", font=FONT_ROW, fill=ACCENT_ORANGE)
-                        try:
-                            tw = row_draw.textlength("OOC:", font=FONT_ROW)
-                        except AttributeError:
-                            tw = FONT_ROW.getsize("OOC:")[0]
-                        currentX += int(tw)
-                        if len(name) > 21: name = name[:21] + "..."
-                        row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
-                    elif rUser.isChar:
-                        row_draw.text((currentX, textY), "<<", font=FONT_ROW, fill=ACCENT_GREEN)
-                        try:
-                            tw = row_draw.textlength("<<", font=FONT_ROW)
-                        except AttributeError:
-                            tw = FONT_ROW.getsize("<<")[0]
-                        currentX += int(tw)
-                        if len(name) > 21: name = name[:21] + "..."
-                        row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
-                        try:
-                            tw2 = row_draw.textlength(name, font=FONT_ROW)
-                        except AttributeError:
-                            tw2 = FONT_ROW.getsize(name)[0]
-                        currentX += int(tw2)
-                        row_draw.text((currentX, textY), ">>", font=FONT_ROW, fill=ACCENT_GREEN)
-                    else:
-                        if len(name) > 25: name = name[:25] + "..."
-                        row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
-
-                    draw_crossfade_text(row_draw, cols[1], textY, rUser.prevScriptsText, rUser.scriptsText, TEXT_MAIN, globalProgress, FONT_ROW)
-
-                    time_color = TEXT_MAIN
+                textY = currentY - FONT_ROW.getmetrics()[0] - 5
+                if rUser.isOOC:
+                    row_draw.text((currentX, textY), "OOC:", font=FONT_ROW, fill=ACCENT_ORANGE)
                     try:
-                        t = float(rUser.json.get("time", 0))
-                        if t > 5: time_color = ACCENT_RED
-                        elif t > 1: time_color = ACCENT_YELLOW
-                    except: pass
+                        tw = row_draw.textlength("OOC:", font=FONT_ROW)
+                    except AttributeError:
+                        tw = FONT_ROW.getsize("OOC:")[0]
+                    currentX += int(tw)
+                    if len(name) > 21: name = name[:21] + "..."
+                    row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
+                elif rUser.isChar:
+                    row_draw.text((currentX, textY), "<<", font=FONT_ROW, fill=ACCENT_GREEN)
+                    try:
+                        tw = row_draw.textlength("<<", font=FONT_ROW)
+                    except AttributeError:
+                        tw = FONT_ROW.getsize("<<")[0]
+                    currentX += int(tw)
+                    if len(name) > 21: name = name[:21] + "..."
+                    row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
+                    try:
+                        tw2 = row_draw.textlength(name, font=FONT_ROW)
+                    except AttributeError:
+                        tw2 = FONT_ROW.getsize(name)[0]
+                    currentX += int(tw2)
+                    row_draw.text((currentX, textY), ">>", font=FONT_ROW, fill=ACCENT_GREEN)
+                else:
+                    if len(name) > 25: name = name[:25] + "..."
+                    row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
 
-                    draw_crossfade_text(row_draw, cols[2], textY, rUser.prevTimeText, rUser.timeText, time_color, globalProgress, FONT_ROW)
-                    draw_crossfade_text(row_draw, cols[3], textY, rUser.prevMemoryText, rUser.memoryText, TEXT_MAIN, globalProgress, FONT_ROW)
-                    draw_crossfade_text(row_draw, cols[4], textY, rUser.prevComplexityText, rUser.complexityText, TEXT_MAIN, globalProgress, FONT_ROW)
+                draw_crossfade_text(row_draw, cols[1], textY, rUser.prevScriptsText, rUser.scriptsText, TEXT_MAIN, globalProgress, FONT_ROW)
 
-                    row_draw.line([(margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] - 15), (WIDTH - margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] - 15)], fill=(40, 50, 60), width=1)
+                time_color = TEXT_MAIN
+                try:
+                    t = float(rUser.json.get("time", 0))
+                    if t > 5: time_color = ACCENT_RED
+                    elif t > 1: time_color = ACCENT_YELLOW
+                except: pass
 
-                    if alpha < 255:
-                        row_img.putalpha(row_img.split()[3].point(lambda p: p * (alpha / 255.0)))
+                draw_crossfade_text(row_draw, cols[2], textY, rUser.prevTimeText, rUser.timeText, time_color, globalProgress, FONT_ROW)
+                draw_crossfade_text(row_draw, cols[3], textY, rUser.prevMemoryText, rUser.memoryText, TEXT_MAIN, globalProgress, FONT_ROW)
+                draw_crossfade_text(row_draw, cols[4], textY, rUser.prevComplexityText, rUser.complexityText, TEXT_MAIN, globalProgress, FONT_ROW)
 
-                    img.alpha_composite(row_img)
+                row_draw.line([(margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] - 15), (WIDTH - margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] - 15)], fill=(40, 50, 60), width=1)
 
-        images.append(img.convert('RGB'))
-    return images
+                if alpha < 255:
+                    row_img.putalpha(row_img.split()[3].point(lambda p: p * (alpha / 255.0)))
+
+                img.alpha_composite(row_img)
+
+    img_byte_arr = io.BytesIO()
+    img.convert('RGB').save(img_byte_arr, format='JPEG', quality=85)
+    return f, img_byte_arr.getvalue()
 
 
-def render_zone(data, prev_data, regionName, history):
+def get_zone_frames_count(data, prev_data):
+    prevList = []
+    if prev_data and "zones" in prev_data:
+        for z in prev_data["zones"]:
+            prevList.append(RenderableZone(z))
+        prevList.sort(key=lambda z: z.nameToDisplay.lower())
+        for i, z in enumerate(prevList):
+            z.prevIndex = i
+
+    currentList = []
+    if data and "zones" in data:
+        for z in data["zones"]:
+            currentList.append(RenderableZone(z))
+        currentList.sort(key=lambda z: z.nameToDisplay.lower())
+        for i, z in enumerate(currentList):
+            z.targetIndex = i
+
+    for cz in currentList:
+        pz = next((p for p in prevList if p.nameToDisplay == cz.nameToDisplay), None)
+        if pz:
+            if (cz.occupancyText != pz.occupancyText or
+                cz.dynamicText != pz.dynamicText or
+                cz.rezStatusText != pz.rezStatusText or
+                cz.liEstText != pz.liEstText or
+                pz.prevIndex != cz.targetIndex):
+                return 8
+        else:
+            return 8
+
+    for pz in prevList:
+        found = any(cz.nameToDisplay == pz.nameToDisplay for cz in currentList)
+        if not found:
+            return 8
+
+    return 1
+
+def render_zone_frame(f, frames, data, prev_data, regionName, history):
     prevList = []
     if prev_data and "zones" in prev_data:
         for z in prev_data["zones"]:
@@ -450,12 +528,6 @@ def render_zone(data, prev_data, regionName, history):
             pz.isRemoved = True
             pz.targetIndex = pz.prevIndex
             renderList.append(pz)
-
-    anyChanges = any(rz.isNew or rz.isRemoved or rz.occupancyChanged or rz.dynamicChanged or rz.rezStatusChanged or rz.liEstChanged or rz.prevIndex != rz.targetIndex for rz in renderList)
-
-    frames = 8 if anyChanges else 1
-
-    images = []
 
     # PRE-RENDER BASE IMAGE
     base_img = Image.new('RGBA', (WIDTH, HEIGHT), BG_COLOR)
@@ -523,135 +595,135 @@ def render_zone(data, prev_data, regionName, history):
         base_draw.line([(WIDTH,HEIGHT), (WIDTH-50,HEIGHT)], fill=ACCENT_CYAN, width=4)
         base_draw.line([(WIDTH,HEIGHT), (WIDTH,HEIGHT-50)], fill=ACCENT_CYAN, width=4)
 
-    for f in range(frames):
-        img = base_img.copy()
-        draw = ImageDraw.Draw(img)
+    img = base_img.copy()
+    draw = ImageDraw.Draw(img)
 
-        if data or prev_data:
-            # Render prim chart and animated axis
-            if history and len(history) > 1:
-                colWidth = (WIDTH - 2 * margin)
-                x = margin + (0 * colWidth)
-                chartX = x + 250
-                chartY = statsY - 10
-                chartW = 200
-                chartH = 50
+    if data or prev_data:
+        # Render prim chart and animated axis
+        if history and len(history) > 1:
+            colWidth = (WIDTH - 2 * margin)
+            x = margin + (0 * colWidth)
+            chartX = x + 250
+            chartY = statsY - 10
+            chartW = 200
+            chartH = 50
 
-                min_val = min(history)
-                max_val = max(history)
-                if max_val == min_val:
-                    min_val -= 10
-                    max_val += 10
+            min_val = min(history)
+            max_val = max(history)
+            if max_val == min_val:
+                min_val -= 10
+                max_val += 10
 
-                points = []
-                size = len(history)
-                for j, val in enumerate(history):
-                    px = chartX + (j / float(max(1, size - 1))) * chartW
-                    py = chartY + chartH - ((val - min_val) / float(max_val - min_val)) * chartH
-                    points.append((px, py))
+            points = []
+            size = len(history)
+            for j, val in enumerate(history):
+                px = chartX + (j / float(max(1, size - 1))) * chartW
+                py = chartY + chartH - ((val - min_val) / float(max_val - min_val)) * chartH
+                points.append((px, py))
 
-                if len(points) > 1:
-                    # Draw filled polygon (using cyan with 50/255 alpha ~50 out of 255)
-                    poly_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
-                    poly_draw = ImageDraw.Draw(poly_img)
-                    poly_points = [(chartX, chartY + chartH)] + points + [(points[-1][0], chartY + chartH)]
-                    poly_draw.polygon(poly_points, fill=(ACCENT_CYAN[0], ACCENT_CYAN[1], ACCENT_CYAN[2], 50))
-                    img.alpha_composite(poly_img)
+            if len(points) > 1:
+                # Draw filled polygon (using cyan with 50/255 alpha ~50 out of 255)
+                poly_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+                poly_draw = ImageDraw.Draw(poly_img)
+                poly_points = [(chartX, chartY + chartH)] + points + [(points[-1][0], chartY + chartH)]
+                poly_draw.polygon(poly_points, fill=(ACCENT_CYAN[0], ACCENT_CYAN[1], ACCENT_CYAN[2], 50))
+                img.alpha_composite(poly_img)
 
-                    # Draw outline
-                    draw.line(points, fill=ACCENT_CYAN, width=2)
+                # Draw outline
+                draw.line(points, fill=ACCENT_CYAN, width=2)
 
-                # Animated Scrolling Time Axis Logic
-                baseTime = time.time()
-                frameProgress = f / frames if frames > 1 else 0
-                timeOffset = (baseTime + frameProgress) * 20.0  # multiplier controls scroll speed
+            # Animated Scrolling Time Axis Logic
+            baseTime = time.time()
+            frameProgress = f / frames if frames > 1 else 0
+            timeOffset = (baseTime + frameProgress) * 20.0  # multiplier controls scroll speed
 
-                tickSpacing = 15
-                tickHeight = 5
-                offset_mod = timeOffset % tickSpacing
+            tickSpacing = 15
+            tickHeight = 5
+            offset_mod = timeOffset % tickSpacing
 
-                # Draw ticks
-                for tick in range(0, chartW + tickSpacing, tickSpacing):
-                    tickX = chartX + tick - offset_mod
-                    if chartX <= tickX <= chartX + chartW:
-                        draw.line([(tickX, chartY + chartH - tickHeight), (tickX, chartY + chartH)], fill=BORDER_COLOR, width=1)
+            # Draw ticks
+            for tick in range(0, chartW + tickSpacing, tickSpacing):
+                tickX = chartX + tick - offset_mod
+                if chartX <= tickX <= chartX + chartW:
+                    draw.line([(tickX, chartY + chartH - tickHeight), (tickX, chartY + chartH)], fill=BORDER_COLOR, width=1)
 
-                # Draw subtle scanner effect if animating
-                if frames > 1:
-                    scanX = chartX + ((timeOffset * 2) % chartW)
-                    if chartX <= scanX <= chartX + chartW:
-                        scan_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
-                        scan_draw = ImageDraw.Draw(scan_img)
-                        scan_draw.line([(scanX, chartY), (scanX, chartY + chartH)], fill=(ACCENT_CYAN[0], ACCENT_CYAN[1], ACCENT_CYAN[2], 100), width=1)
-                        img.paste(scan_img, (0, 0), scan_img)
+            # Draw subtle scanner effect if animating
+            if frames > 1:
+                scanX = chartX + ((timeOffset * 2) % chartW)
+                if chartX <= scanX <= chartX + chartW:
+                    scan_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+                    scan_draw = ImageDraw.Draw(scan_img)
+                    scan_draw.line([(scanX, chartY), (scanX, chartY + chartH)], fill=(ACCENT_CYAN[0], ACCENT_CYAN[1], ACCENT_CYAN[2], 100), width=1)
+                    img.paste(scan_img, (0, 0), scan_img)
 
-            cols = [50, 420, 560, 680, 800]
-            if renderList:
-                globalProgress = f / (frames - 1) if frames > 1 else 1.0
-                slideProgress = min(1.0, f / 4.0) if frames > 1 else 1.0
-                slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
+        cols = [50, 420, 560, 680, 800]
+        if renderList:
+            globalProgress = f / (frames - 1) if frames > 1 else 1.0
+            slideProgress = min(1.0, f / 4.0) if frames > 1 else 1.0
+            slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
 
-                for rZone in renderList:
-                    prevY = rowStartY + rZone.prevIndex * rowHeight
-                    targetY = rowStartY + rZone.targetIndex * rowHeight
-                    currentY = int(prevY + (targetY - prevY) * slideProgress)
+            for rZone in renderList:
+                prevY = rowStartY + rZone.prevIndex * rowHeight
+                targetY = rowStartY + rZone.targetIndex * rowHeight
+                currentY = int(prevY + (targetY - prevY) * slideProgress)
 
-                    if currentY > HEIGHT - 20 and prevY > HEIGHT - 20: continue
+                if currentY > HEIGHT - 20 and prevY > HEIGHT - 20: continue
 
-                    alpha = 255
-                    if rZone.isNew:
-                        alpha = int(255 * min(1.0, max(0.0, slideProgress)))
-                    elif rZone.isRemoved:
-                        alpha = int(255 * min(1.0, max(0.0, 1.0 - slideProgress)))
+                alpha = 255
+                if rZone.isNew:
+                    alpha = int(255 * min(1.0, max(0.0, slideProgress)))
+                elif rZone.isRemoved:
+                    alpha = int(255 * min(1.0, max(0.0, 1.0 - slideProgress)))
 
-                    name = rZone.nameToDisplay
-                    currentX = cols[0]
+                name = rZone.nameToDisplay
+                currentX = cols[0]
 
-                    row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
-                    row_draw = ImageDraw.Draw(row_img)
+                row_img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+                row_draw = ImageDraw.Draw(row_img)
 
-                    textY = currentY - FONT_ROW.getmetrics()[0] - 5
-                    if len(name) > 25: name = name[:25] + "..."
-                    row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
+                textY = currentY - FONT_ROW.getmetrics()[0] - 5
+                if len(name) > 25: name = name[:25] + "..."
+                row_draw.text((currentX, textY), name, font=FONT_ROW, fill=TEXT_MAIN)
 
-                    occColor = TEXT_MAIN
-                    if rZone.occupancy > 0:
-                        occColor = ACCENT_GREEN
-                    draw_crossfade_text(row_draw, cols[1], textY, rZone.prevOccupancyText, rZone.occupancyText, occColor, globalProgress, FONT_ROW)
+                occColor = TEXT_MAIN
+                if rZone.occupancy > 0:
+                    occColor = ACCENT_GREEN
+                draw_crossfade_text(row_draw, cols[1], textY, rZone.prevOccupancyText, rZone.occupancyText, occColor, globalProgress, FONT_ROW)
 
-                    dynColor = TEXT_MAIN
-                    if rZone.dynamicText == "Missing":
-                        dynColor = ACCENT_RED
-                    elif rZone.dynamicText == "No Comms":
-                        dynColor = ACCENT_YELLOW
-                    draw_crossfade_text(row_draw, cols[2], textY, rZone.prevDynamicText, rZone.dynamicText, dynColor, globalProgress, FONT_ROW)
+                dynColor = TEXT_MAIN
+                if rZone.dynamicText == "Missing":
+                    dynColor = ACCENT_RED
+                elif rZone.dynamicText == "No Comms":
+                    dynColor = ACCENT_YELLOW
+                draw_crossfade_text(row_draw, cols[2], textY, rZone.prevDynamicText, rZone.dynamicText, dynColor, globalProgress, FONT_ROW)
 
-                    liColor = TEXT_MAIN
-                    if rZone.liEstText in ["~", "-"]:
-                        liColor = BORDER_COLOR
-                    draw_crossfade_text(row_draw, cols[3], textY, rZone.prevLiEstText, rZone.liEstText, liColor, globalProgress, FONT_ROW)
+                liColor = TEXT_MAIN
+                if rZone.liEstText in ["~", "-"]:
+                    liColor = BORDER_COLOR
+                draw_crossfade_text(row_draw, cols[3], textY, rZone.prevLiEstText, rZone.liEstText, liColor, globalProgress, FONT_ROW)
 
-                    statusColor = TEXT_MAIN
-                    if rZone.isDynamic:
-                        status = rZone.rezStatusText.lower()
-                        if status in ["deployed", "rezzing"]:
-                            statusColor = ACCENT_GREEN
-                        elif status in ["not deployed", "derezzing"]:
-                            statusColor = ACCENT_ORANGE
-                    else:
-                        statusColor = BORDER_COLOR
+                statusColor = TEXT_MAIN
+                if rZone.isDynamic:
+                    status = rZone.rezStatusText.lower()
+                    if status in ["deployed", "rezzing"]:
+                        statusColor = ACCENT_GREEN
+                    elif status in ["not deployed", "derezzing"]:
+                        statusColor = ACCENT_ORANGE
+                else:
+                    statusColor = BORDER_COLOR
 
-                    draw_crossfade_text(row_draw, cols[4], textY, rZone.prevRezStatusText, rZone.rezStatusText, statusColor, globalProgress, FONT_ROW)
+                draw_crossfade_text(row_draw, cols[4], textY, rZone.prevRezStatusText, rZone.rezStatusText, statusColor, globalProgress, FONT_ROW)
 
-                    row_draw.line([(margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] -15), (WIDTH - margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] -15)], fill=(40, 50, 60), width=1)
+                row_draw.line([(margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] -15), (WIDTH - margin, currentY + rowHeight - FONT_ROW.getmetrics()[0] -15)], fill=(40, 50, 60), width=1)
 
-                    if alpha < 255:
-                        row_img.putalpha(row_img.split()[3].point(lambda p: p * (alpha / 255.0)))
+                if alpha < 255:
+                    row_img.putalpha(row_img.split()[3].point(lambda p: p * (alpha / 255.0)))
 
-                    img.alpha_composite(row_img)
+                img.alpha_composite(row_img)
 
-        images.append(img.convert('RGB'))
-    return images
+    img_byte_arr = io.BytesIO()
+    img.convert('RGB').save(img_byte_arr, format='JPEG', quality=85)
+    return f, img_byte_arr.getvalue()
 
 @app.get("/health")
 async def health_check():
@@ -694,31 +766,44 @@ async def render(request: Request, payload: RenderRequest):
         try:
             # Generate the frames only after acquiring the lock to prevent blocking the
             # event loop with expensive PIL operations for updates that will be discarded.
+            loop = asyncio.get_running_loop()
+
             if render_type == "zone":
-                # CPU bound rendering, but running in async task for now.
-                # (Ideally use run_in_executor for heavy CPU load)
-                images = render_zone(data, prev_data, regionName, primsHistory)
+                frames_count = get_zone_frames_count(data, prev_data)
+                tasks = [
+                    loop.run_in_executor(
+                        executor,
+                        render_zone_frame,
+                        f, frames_count, data, prev_data, regionName, primsHistory
+                    )
+                    for f in range(frames_count)
+                ]
             else:
-                images = render_sim(data, prev_data, regionName)
+                frames_count = get_sim_frames_count(data, prev_data)
+                tasks = [
+                    loop.run_in_executor(
+                        executor,
+                        render_sim_frame,
+                        f, frames_count, data, prev_data, regionName
+                    )
+                    for f in range(frames_count)
+                ]
 
-            if images:
-                for img in images:
-                    # Convert frame to JPEG
-                    img_byte_arr = io.BytesIO()
-                    img.save(img_byte_arr, format='JPEG', quality=85)
-                    img_bytes = img_byte_arr.getvalue()
+            results = await asyncio.gather(*tasks)
+            # Sort the results by frame index to ensure chronological order
+            results.sort(key=lambda x: x[0])
 
+            if results:
+                for f_index, img_bytes in results:
                     # Publish frame to Redis channel
                     await redis_client.publish(channel_name, img_bytes)
 
                     # Wait briefly between frames to match animation timing (approx 8fps like 125ms duration)
-                    if len(images) > 1:
+                    if frames_count > 1:
                         await asyncio.sleep(0.125)
 
                 # Store the very last frame as the "latest" state for new connections
-                img_byte_arr = io.BytesIO()
-                images[-1].save(img_byte_arr, format='JPEG', quality=85)
-                latest_img_bytes = img_byte_arr.getvalue()
+                latest_img_bytes = results[-1][1]
                 await redis_client.set(latest_key, latest_img_bytes)
         finally:
             # Safe delete: Only delete the lock if it still belongs to this task
