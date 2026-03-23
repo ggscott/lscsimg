@@ -9,9 +9,9 @@ The application is a **Python-based FastAPI microservice** that renders real-tim
 To support real-time animated streaming (`multipart/x-mixed-replace`) over MJPEG across potentially multiple pod replicas without shared state, it uses **Redis Pub/Sub**.
 When a `POST` request with state data is received, the app computes a series of intermediate frames to produce an animation (crossfading text, sliding rows, etc.). The application uses a global **`ProcessPoolExecutor`** (initialized via FastAPI lifespan) to parallelize CPU-bound **PIL** image generation. To avoid pickling overhead, worker processes receive raw JSON payloads and return encoded JPEG bytes directly.
 
-Animation frames rendered in parallel are collected, sorted chronologically by frame index, and published to Redis sequentially with a **0.125s delay** to maintain a target 8fps for the MJPEG stream. Animations are configured to run for 32 frames, resulting in a total animation duration of 4 seconds.
+Animation frames rendered in parallel are collected, sorted chronologically by frame index, and published to Redis sequentially with a **0.125s delay** to maintain a target 8fps for the MJPEG stream. Animations are configured to run for 8 frames, resulting in a total animation duration of 1 second.
 
-To prevent frame interleaving during high-frequency concurrent updates, rendering endpoints use a **Redis lock** with a 5-second timeout and a unique UUID to ensure safe deletion. If the lock is unavailable, the application immediately skips the redundant rendering process rather than retrying or queuing it.
+To prevent frame interleaving during high-frequency concurrent updates, rendering endpoints use a **Redis lock** with a 10-second timeout and a unique UUID to ensure safe deletion. If the lock is unavailable, the application immediately skips the redundant rendering process rather than retrying or queuing it.
 
 Clients (such as Second Life Moap clients) connect to the `GET /stream/{region_name}/{render_type}` endpoint, which returns a `StreamingResponse` that listens to the corresponding Redis channel and pushes frames to the client as they arrive.
 
