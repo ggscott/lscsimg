@@ -446,6 +446,9 @@ def render_sim_frame(f, frames, data, prev_data, regionName):
 
                 img.alpha_composite(row_img)
 
+    # Draw frame number in top left corner (temporary)
+    draw.text((10, 10), str(f), font=FONT_ROW, fill=TEXT_MAIN)
+
     img_byte_arr = io.BytesIO()
     img.convert('RGB').save(img_byte_arr, format='JPEG', quality=85)
     return f, img_byte_arr.getvalue()
@@ -720,6 +723,9 @@ def render_zone_frame(f, frames, data, prev_data, regionName, history):
                     row_img.putalpha(row_img.split()[3].point(lambda p: p * (alpha / 255.0)))
 
                 img.alpha_composite(row_img)
+
+    # Draw frame number in top left corner (temporary)
+    draw.text((10, 10), str(f), font=FONT_ROW, fill=TEXT_MAIN)
 
     img_byte_arr = io.BytesIO()
     img.convert('RGB').save(img_byte_arr, format='JPEG', quality=85)
