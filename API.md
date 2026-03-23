@@ -7,7 +7,11 @@ This document describes the overall architecture, application interface, and API
 The application is a **Python-based FastAPI microservice** that renders real-time data visualization images using **Pillow (PIL)**. The service is designed to run in a **Kubernetes (k8s)** environment where pods are ephemeral.
 
 To support real-time animated streaming (`multipart/x-mixed-replace`) over MJPEG across potentially multiple pod replicas without shared state, it uses **Redis Pub/Sub**.
-When a `POST` request with state data is received, the app computes a series of intermediate frames to produce an animation (crossfading text, sliding rows, etc.). Each frame is generated as a JPEG and published to a Redis channel corresponding to the specific region and render type.
+When a `POST` request with state data is received, the app computes a series of intermediate frames to produce an animation (crossfading text, sliding rows, etc.). The application uses a global **`ProcessPoolExecutor`** (initialized via FastAPI lifespan) to parallelize CPU-bound **PIL** image generation. To avoid pickling overhead, worker processes receive raw JSON payloads and return encoded JPEG bytes directly.
+
+Animation frames rendered in parallel are collected, sorted chronologically by frame index, and published to Redis sequentially with a **0.125s delay** to maintain a target 8fps for the MJPEG stream. Animations are configured to run for 32 frames, resulting in a total animation duration of 4 seconds.
+
+To prevent frame interleaving during high-frequency concurrent updates, rendering endpoints use a **Redis lock** with a 5-second timeout and a unique UUID to ensure safe deletion. If the lock is unavailable, the application immediately skips the redundant rendering process rather than retrying or queuing it.
 
 Clients (such as Second Life Moap clients) connect to the `GET /stream/{region_name}/{render_type}` endpoint, which returns a `StreamingResponse` that listens to the corresponding Redis channel and pushes frames to the client as they arrive.
 
@@ -78,6 +82,12 @@ Upon connection, it attempts to fetch the latest cached frame for the region. Th
 
 **Response:**
 `StreamingResponse` with `media_type="multipart/x-mixed-replace; boundary=frame"`.
+
+**Client-Specific Requirements:**
+- **MoaP / CEF Clients (Second Life):**
+  - **Multipart Boundaries:** When streaming `multipart/x-mixed-replace` MJPEG, the multipart boundary (e.g., `--frame\r\n`) must be appended at the end of each frame's payload rather than prepended. An initial boundary is sent when the stream starts. This ensures the browser engine immediately recognizes the frame as complete.
+  - **Content-Length:** Each frame in the stream must include a `Content-Length` header. This ensures the viewer buffers the entire byte payload before swapping the image, preventing blank flashes.
+  - **Keep-Alive Heartbeat:** To prevent MJPEG stream connections from being forcibly closed due to idle timeouts by the Kubernetes Ingress or Second Life MoaP client, the `stream_generator` implements a keep-alive heartbeat. It uses a 5-second timeout on Redis PubSub listens, yielding the latest cached frame if no new updates arrive.
 
 ### 4. Stream HEAD Request
 ```http
