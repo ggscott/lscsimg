@@ -832,14 +832,17 @@ async def stream_generator(safe_name: str, render_type: str):
     await pubsub.subscribe(channel_name)
 
     try:
+        # Send the initial boundary to start the stream correctly
+        yield b"--frame\r\n"
+
         # First, try to send the latest cached frame immediately so the client sees something right away
         latest_frame = await redis_client.get(latest_key)
         if latest_frame:
             yield (
-                b"--frame\r\n"
                 b"Content-Type: image/jpeg\r\n"
                 b"Content-Length: " + str(len(latest_frame)).encode() + b"\r\n\r\n" +
                 latest_frame + b"\r\n"
+                b"--frame\r\n"
             )
         else:
             # If no latest frame, generate a placeholder
@@ -853,10 +856,10 @@ async def stream_generator(safe_name: str, render_type: str):
             placeholder_bytes = img_byte_arr.getvalue()
 
             yield (
-                b"--frame\r\n"
                 b"Content-Type: image/jpeg\r\n"
                 b"Content-Length: " + str(len(placeholder_bytes)).encode() + b"\r\n\r\n" +
                 placeholder_bytes + b"\r\n"
+                b"--frame\r\n"
             )
 
         # Then listen for new frames published to the channel with a timeout
@@ -869,20 +872,20 @@ async def stream_generator(safe_name: str, render_type: str):
             if message and message['type'] == 'message':
                 frame_data = message['data']
                 yield (
-                    b"--frame\r\n"
                     b"Content-Type: image/jpeg\r\n"
                     b"Content-Length: " + str(len(frame_data)).encode() + b"\r\n\r\n" +
                     frame_data + b"\r\n"
+                    b"--frame\r\n"
                 )
             elif message is None:
                 # Timeout reached, send a keep-alive heartbeat
                 heartbeat_frame = await redis_client.get(latest_key)
                 if heartbeat_frame:
                     yield (
-                        b"--frame\r\n"
                         b"Content-Type: image/jpeg\r\n"
                         b"Content-Length: " + str(len(heartbeat_frame)).encode() + b"\r\n\r\n" +
                         heartbeat_frame + b"\r\n"
+                        b"--frame\r\n"
                     )
     finally:
         await pubsub.unsubscribe(channel_name)
