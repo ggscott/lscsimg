@@ -811,6 +811,12 @@ async def render(request: Request, payload: RenderRequest):
                 # Store the very last frame as the "latest" state for new connections
                 latest_img_bytes = results[-1][1]
                 await redis_client.set(latest_key, latest_img_bytes)
+
+                # Send a final duplicate of the last frame to force the CEF browser to
+                # immediately render the actual last frame of the animation
+                if frames_count > 1:
+                    await redis_client.publish(channel_name, latest_img_bytes)
+
         finally:
             # Safe delete: Only delete the lock if it still belongs to this task
             current_lock_val = await redis_client.get(lock_key)
