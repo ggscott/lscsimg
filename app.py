@@ -230,14 +230,14 @@ def get_sim_frames_count(data, prev_data):
                 cu.memoryText != pu.memoryText or
                 cu.complexityText != pu.complexityText or
                 pu.prevIndex != cu.targetIndex):
-                return 8
+                return 32
         else:
-            return 8
+            return 32
 
     for pu in prevList:
         found = any((cu.uuid == pu.uuid and pu.uuid) or (not pu.uuid and cu.nameToDisplay == pu.nameToDisplay) for cu in currentList)
         if not found:
-            return 8
+            return 32
 
     return 1
 
@@ -360,12 +360,12 @@ def render_sim_frame(f, frames, data, prev_data, regionName):
         cols = [50, 450, 650, 770, 890]
         if renderList:
             globalProgress = f / (frames - 1) if frames > 1 else 1.0
-            slideProgress = min(1.0, f / 4.0) if frames > 1 else 1.0
+            slideProgress = min(1.0, f / 16.0) if frames > 1 else 1.0
             slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
 
             pulseProgress = 0.0
-            if frames > 1 and f >= 2:
-                pulsePhase = (f - 1) / 7.0
+            if frames > 1 and f >= 16:
+                pulsePhase = (f - 16) / 15.0
                 pulseProgress = math.sin(pulsePhase * math.pi)
 
             for rUser in renderList:
@@ -476,14 +476,14 @@ def get_zone_frames_count(data, prev_data):
                 cz.rezStatusText != pz.rezStatusText or
                 cz.liEstText != pz.liEstText or
                 pz.prevIndex != cz.targetIndex):
-                return 8
+                return 32
         else:
-            return 8
+            return 32
 
     for pz in prevList:
         found = any(cz.nameToDisplay == pz.nameToDisplay for cz in currentList)
         if not found:
-            return 8
+            return 32
 
     return 1
 
@@ -659,7 +659,7 @@ def render_zone_frame(f, frames, data, prev_data, regionName, history):
         cols = [50, 420, 560, 680, 800]
         if renderList:
             globalProgress = f / (frames - 1) if frames > 1 else 1.0
-            slideProgress = min(1.0, f / 4.0) if frames > 1 else 1.0
+            slideProgress = min(1.0, f / 16.0) if frames > 1 else 1.0
             slideProgress = 1.0 - pow(1.0 - slideProgress, 3)
 
             for rZone in renderList:
