@@ -85,7 +85,7 @@ Upon connection, it attempts to fetch the latest cached frame for the region. Th
 
 **Client-Specific Requirements:**
 - **MoaP / CEF Clients (Second Life):**
-  - **Multipart Boundaries:** When streaming `multipart/x-mixed-replace` MJPEG, the multipart boundary (e.g., `--frame\r\n`) must be appended at the end of each frame's payload rather than prepended. An initial boundary is sent when the stream starts. This ensures the browser engine immediately recognizes the frame as complete.
+  - **Multipart Boundaries:** When streaming `multipart/x-mixed-replace` MJPEG, the multipart boundary (e.g., `--frame\r\n`) must be prepended before each frame's payload (along with the content type and length headers) to ensure the browser engine immediately recognizes the frame boundaries.
   - **Content-Length:** Each frame in the stream must include a `Content-Length` header. This ensures the viewer buffers the entire byte payload before swapping the image, preventing blank flashes.
   - **Keep-Alive Heartbeat:** To prevent MJPEG stream connections from being forcibly closed due to idle timeouts by the Kubernetes Ingress or Second Life MoaP client, the `stream_generator` implements a keep-alive heartbeat. It uses a 5-second timeout on Redis PubSub listens, yielding the latest cached frame if no new updates arrive.
 
