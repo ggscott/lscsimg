@@ -8,7 +8,10 @@ import io
 import json
 import time
 import uuid
+import logging
 from PIL import Image, ImageDraw, ImageFont
+
+logger = logging.getLogger("uvicorn.error")
 import math
 import re
 import urllib.request
@@ -764,9 +767,13 @@ async def render(request: Request, payload: RenderRequest):
             return # Skip this render immediately
 
         try:
+            start_total_time = time.time()
+
             # Generate the frames only after acquiring the lock to prevent blocking the
             # event loop with expensive PIL operations for updates that will be discarded.
             loop = asyncio.get_running_loop()
+
+            start_render_time = time.time()
 
             if render_type == "zone":
                 frames_count = get_zone_frames_count(data, prev_data)
@@ -790,6 +797,8 @@ async def render(request: Request, payload: RenderRequest):
                 ]
 
             results = await asyncio.gather(*tasks)
+            render_duration = time.time() - start_render_time
+
             # Sort the results by frame index to ensure chronological order
             results.sort(key=lambda x: x[0])
 
@@ -810,6 +819,14 @@ async def render(request: Request, payload: RenderRequest):
                 # immediately render the actual last frame of the animation
                 if frames_count > 1:
                     await redis_client.publish(channel_name, latest_img_bytes)
+
+            total_duration = time.time() - start_total_time
+            update_type = "single frame update" if frames_count == 1 else "animation update"
+            logger.info(
+                f"[Performance] Render type: {render_type} | "
+                f"CPU render time: {render_duration:.3f} seconds | "
+                f"Total background task time: {total_duration:.3f} seconds for {update_type}."
+            )
 
         finally:
             # Safe delete: Only delete the lock if it still belongs to this task
