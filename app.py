@@ -16,7 +16,7 @@ import redis.asyncio as redis
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
 
-## Global process pool executor
+# Global process pool executor
 executor = None
 
 @asynccontextmanager
