@@ -4,38 +4,12 @@ This document describes the overall architecture, application interface, and API
 
 ## Architecture Overview
 
-The application is a **Python-based FastAPI microservice** that renders real-time data visualization images using **Pillow (PIL)**. The service is designed to run in a **Kubernetes (k8s)** environment where pods are ephemeral.
+The application is a **Python-based FastAPI microservice** that serves a real-time data visualization dashboard. The service is designed to run in a **Kubernetes (k8s)** environment where pods are ephemeral.
 
-To support real-time animated streaming (`multipart/x-mixed-replace`) over MJPEG across potentially multiple pod replicas without shared state, it uses **Redis Pub/Sub**.
-When a `POST` request with state data is received, the app computes a series of intermediate frames to produce an animation (crossfading text, sliding rows, etc.). The application uses a global **`ProcessPoolExecutor`** (initialized via FastAPI lifespan) to parallelize CPU-bound **PIL** image generation. To avoid pickling overhead, worker processes receive raw JSON payloads and return encoded JPEG bytes directly.
+To support real-time animated streaming across potentially multiple pod replicas without shared state, it uses **Redis Pub/Sub** and **WebSockets**.
+When a `POST` request with state data is received, the app saves the raw JSON to Redis and broadcasts it via a Redis Pub/Sub channel.
 
-Animation frames rendered in parallel are collected, sorted chronologically by frame index, and published to Redis sequentially with a **0.125s delay** to maintain a target 8fps for the MJPEG stream. Animations are configured to run for 8 frames, resulting in a total animation duration of 1 second.
-
-To prevent frame interleaving during high-frequency concurrent updates, rendering endpoints use a **Redis lock** with a 10-second timeout and a unique UUID to ensure safe deletion. If the lock is unavailable, the application immediately skips the redundant rendering process rather than retrying or queuing it.
-
-Clients (such as Second Life Moap clients) connect to the `GET /stream/{region_name}/{render_type}` endpoint, which returns a `StreamingResponse` that listens to the corresponding Redis channel and pushes frames to the client as they arrive.
-
-## Data Structures
-
-The primary data payloads and internal states are represented by the following classes:
-
-### `RenderRequest` (Pydantic BaseModel)
-The expected JSON payload when triggering a new render.
-- `data`: Optional dict containing the current state (`users` for sim, `zones` for zone).
-- `previousData`: Optional dict containing the previous state, used for calculating animations.
-- `regionName`: String representing the region. Defaults to "Unknown Region".
-- `type`: String, either `"sim"` or `"zone"`.
-- `primsHistory`: Optional list of integers for historical prim counts.
-
-### `RenderableUser`
-Represents an individual user/agent in the "sim" rendering mode.
-- Extracts details from the JSON like `uuid`, `name`, `category`, `isOOC`, `isChar`, `total` / `active` scripts, `time`, `memory`, and `complexity`.
-- Tracks previous states and calculates if a value has changed to drive animations.
-
-### `RenderableZone`
-Represents a sub-region or parcel in the "zone" rendering mode.
-- Extracts details from the JSON like `uuid`, `name`, `isDynamic`, `occupancy`, `rezStatus`, and `liEst`.
-- Tracks previous states and calculates if a value has changed to drive animations.
+Clients (such as Second Life Moap clients via CEF browsers) connect to the `GET /view/{region_name}/{render_type}` endpoint, which serves a static HTML/CSS/JS web application. The frontend JavaScript establishes a WebSocket connection to `WS /ws/{region_name}/{render_type}`. The server immediately pushes the latest cached JSON state, then listens to the Redis channel and pushes subsequent updates to the browser. The browser handles layout, DOM diffing, and CSS animations entirely on the client side.
 
 ## API Endpoints
 
@@ -56,45 +30,40 @@ Returns a simple JSON status to verify the service is running. Useful for k8s li
 POST /
 POST /render
 ```
-Accepts JSON payload conforming to the `RenderRequest` model.
-This endpoint calculates animation frames based on the difference between `data` and `previousData`, renders them as JPEGs, and publishes them to the Redis Pub/Sub channel. The final frame is also cached in Redis as the latest state.
+Accepts JSON payload. Extracts the current `data` and drops `previousData` (as client-side JS is stateful and handles its own diffing). Serializes the payload and pushes it to the Redis channel `region:{safe_name}:{render_type}` and caches it under `latest:{safe_name}:{render_type}`.
 
-**Request Body:** `RenderRequest`
-
-**Response:**
-Returns a JSON payload with the permanent stream URL for the requested region and render type.
+**Request Body Example:**
 ```json
 {
-  "url": "http://<host>/stream/<safe_region_name>/<render_type>"
+    "data": {"users": [...]},
+    "regionName": "My Region",
+    "type": "sim"
 }
 ```
 
-### 3. Stream MJPEG Frames
-```http
-GET /stream/{region_name}/{render_type}
-```
-Initiates a long-lived connection that streams animated JPEG frames to the client using `multipart/x-mixed-replace`.
-Upon connection, it attempts to fetch the latest cached frame for the region. Then it subscribes to the corresponding Redis channel and waits for new frames published by the `/render` endpoint.
-
-**Path Parameters:**
-- `region_name`: The name of the region (will be sanitized for safety).
-- `render_type`: The type of stream, typically "sim" or "zone".
-
 **Response:**
-`StreamingResponse` with `media_type="multipart/x-mixed-replace; boundary=frame"`.
-
-**Client-Specific Requirements:**
-- **MoaP / CEF Clients (Second Life):**
-  - **Multipart Boundaries:** When streaming `multipart/x-mixed-replace` MJPEG, the multipart boundary (e.g., `--frame\r\n`) must be prepended before each frame's payload (along with the content type and length headers) to ensure the browser engine immediately recognizes the frame boundaries.
-  - **Content-Length:** Each frame in the stream must include a `Content-Length` header. This ensures the viewer buffers the entire byte payload before swapping the image, preventing blank flashes.
-  - **Keep-Alive Heartbeat:** To prevent MJPEG stream connections from being forcibly closed due to idle timeouts by the Kubernetes Ingress or Second Life MoaP client, the `stream_generator` implements a keep-alive heartbeat. It uses a 5-second timeout on Redis PubSub listens, yielding the latest cached frame if no new updates arrive.
-
-### 4. Stream HEAD Request
-```http
-HEAD /stream/{region_name}/{render_type}
+Returns a JSON payload with the permanent view URL for the requested region and render type. This triggers a redirect in the client wrapper to load the web page.
+```json
+{
+  "url": "https://<host>/view/<safe_region_name>/<render_type>"
+}
 ```
-Provides headers for the stream endpoint without initiating the stream itself.
-Used by some clients to verify content type or stream existence before connecting.
 
-**Response:**
-Returns a 200 OK with `media_type="multipart/x-mixed-replace; boundary=frame"`.
+### 3. View Dashboard (HTML)
+```http
+GET /view/{region_name}/{render_type}
+```
+Serves the `index.html` static file. The JS bundled with it reads the URL path to determine what state to connect to and render.
+
+### 4. WebSocket Data Stream
+```http
+WS /ws/{region_name}/{render_type}
+```
+Initiates a WebSocket connection for the frontend browser.
+Upon connection, the server immediately sends the latest cached JSON string from Redis so the frontend populates instantly.
+The server then subscribes to the Redis Pub/Sub channel and pushes any new JSON payloads received from the `/render` POST endpoint directly to the browser.
+
+**Client-Side Behavior:**
+- The JavaScript client maintains the current state in memory.
+- When a new WebSocket message arrives, it diffs the JSON against its local state.
+- It dynamically updates the DOM and applies CSS animations (e.g., `transform: translateY` for sliding rows, CSS `animation` keyframes for color flashes on updated values) to create a smooth, cyberpunk-themed visualization.

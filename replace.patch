@@ -1,0 +1,46 @@
+--- static/script.js
++++ static/script.js
+@@ -194,6 +194,13 @@
+         return '';
+     }
+
++    function escapeHtml(unsafe) {
++        return (unsafe || "").toString()
++             .replace(/&/g, "&amp;")
++             .replace(/</g, "&lt;")
++             .replace(/>/g, "&gt;")
++             .replace(/"/g, "&quot;")
++             .replace(/'/g, "&#039;");
++    }
++
+     function updateSimRow(rowEl, item, prevItem, isNew) {
+         let name = item.name || 'Unknown';
+         const isOOC = item.isOOC || false;
+@@ -235,11 +242,12 @@
+
+         const prevComplexityText = prevItem ? String(prevItem.complexity || 0) : null;
+
+-        const nameHtml = `<div class="col-1 ${nameClass}">${name} ${isOOC ? '(OOC)' : ''}</div>`;
++        const safeName = escapeHtml(name);
++        const nameHtml = `<div class="col-1 ${nameClass}">${safeName} ${isOOC ? '(OOC)' : ''}</div>`;
+         const scriptHtml = `<div class="col-2 ${getDiffClass(scriptsText, prevScriptsText, isNew)}">${scriptsText}</div>`;
+         const timeHtml = `<div class="col-3 ${getDiffClass(timeText, prevTimeText, isNew)}">${timeText}</div>`;
+         const memHtml = `<div class="col-4 ${getDiffClass(memoryText, prevMemoryText, isNew)}">${memoryText}</div>`;
+         const cmplxHtml = `<div class="col-5 ${getDiffClass(complexityText, prevComplexityText, isNew)}">${complexityText}</div>`;
+
+         rowEl.innerHTML = nameHtml + scriptHtml + timeHtml + memHtml + cmplxHtml;
+     }
+@@ -265,11 +273,12 @@
+         const prevLi = prevItem?.liEstText || null;
+         const prevRez = prevItem?.rezStatusText || null;
+
+-        const nameHtml = `<div class="col-1">${name}</div>`;
++        const safeName = escapeHtml(name);
++        const nameHtml = `<div class="col-1">${safeName}</div>`;
+         const occHtml = `<div class="col-2 ${getDiffClass(occupancyText, prevOcc, isNew)}">${occupancyText}</div>`;
+         const dynHtml = `<div class="col-3 ${getDiffClass(dynamicText, prevDyn, isNew)}">${dynamicText}</div>`;
+         const liHtml = `<div class="col-4 ${getDiffClass(liEstText, prevLi, isNew)}">${liEstText}</div>`;
+         const stateHtml = `<div class="col-5 ${stateClass} ${getDiffClass(rezStatusText, prevRez, isNew)}">${rezStatusText}</div>`;
+
+         rowEl.innerHTML = nameHtml + occHtml + dynHtml + liHtml + stateHtml;
+     }

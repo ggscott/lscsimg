@@ -1,0 +1,200 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
+
+:root {
+    --bg-color: #101820;
+    --text-main: #e5e5e5;
+    --accent-cyan: #00ffd1;
+    --accent-orange: #ff9500;
+    --accent-green: #00ff40;
+    --accent-yellow: #f8e71c;
+    --accent-red: #ff3b30;
+    --border-color: #3c4650;
+    --row-bg: rgba(60, 70, 80, 0.1);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body, html {
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font-family: 'Roboto Mono', monospace;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.dashboard {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 2vw;
+    position: relative;
+}
+
+.header {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 2vh;
+}
+
+.title {
+    color: var(--accent-cyan);
+    font-size: 4vh;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 1vh;
+}
+
+.stats-container {
+    display: flex;
+    gap: 2vw;
+    flex-wrap: wrap;
+}
+
+.stat-box {
+    display: flex;
+    flex-direction: column;
+    background: var(--row-bg);
+    border: 1px solid var(--border-color);
+    padding: 1vh 1vw;
+    border-radius: 4px;
+}
+
+.stat-label {
+    font-size: 1.5vh;
+    color: var(--accent-yellow);
+    text-transform: uppercase;
+}
+
+.stat-value {
+    font-size: 3vh;
+    font-weight: 700;
+}
+
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.table-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+}
+
+.table-header {
+    display: flex;
+    font-size: 2vh;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    border-bottom: 2px solid var(--accent-cyan);
+    padding-bottom: 1vh;
+    margin-bottom: 1vh;
+}
+
+.table-body {
+    flex: 1;
+    overflow-y: auto;
+    position: relative;
+}
+
+.row {
+    display: flex;
+    font-size: 2vh;
+    padding: 1.5vh 0;
+    border-bottom: 1px solid var(--border-color);
+    align-items: center;
+    position: absolute;
+    width: 100%;
+    transition: transform 0.5s ease;
+}
+
+/* Animations and Colors */
+.fade-in {
+    animation: fadeIn 0.5s ease forwards;
+}
+
+.fade-out {
+    animation: fadeOut 0.5s ease forwards;
+}
+
+.pulse-new {
+    animation: pulseNew 1s ease forwards;
+}
+
+.value-change {
+    animation: flashCyan 1s ease forwards;
+}
+
+.val-bad { color: var(--accent-red); }
+.val-warn { color: var(--accent-yellow); }
+.val-good { color: var(--accent-green); }
+.val-dim { color: var(--border-color); }
+.val-ooc { color: var(--accent-orange); }
+
+/* Column Widths */
+.col-1 { flex: 0 0 40%; }
+.col-2 { flex: 0 0 15%; text-align: right; }
+.col-3 { flex: 0 0 15%; text-align: right; }
+.col-4 { flex: 0 0 15%; text-align: right; }
+.col-5 { flex: 0 0 15%; text-align: right; }
+
+.status-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(16, 24, 32, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    transition: opacity 0.5s;
+}
+
+.status-text {
+    font-size: 5vh;
+    color: var(--accent-red);
+    font-weight: 700;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+@keyframes pulseNew {
+    0% { background-color: var(--accent-green); }
+    100% { background-color: transparent; }
+}
+
+@keyframes flashCyan {
+    0% { color: var(--accent-cyan); }
+    100% { color: inherit; }
+}
+
+.chart-container {
+    display: none; /* Hidden by default, JS will show for Zone mode */
+    position: absolute;
+    top: 2vh;
+    right: 2vw;
+    width: 200px;
+    height: 50px;
+}

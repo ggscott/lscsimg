@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Second Life Rendering Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app" class="dashboard">
+        <header id="stats-header" class="header">
+            <h1 id="region-title" class="title">Region Name</h1>
+            <div id="top-stats" class="stats-container">
+                <!-- Top stats dynamically injected here -->
+            </div>
+            <!-- Canvas container for the sparkline chart (Zone mode) -->
+            <div id="chart-container" class="chart-container">
+                <canvas id="sparkline" width="200" height="50"></canvas>
+            </div>
+        </header>
+
+        <main id="main-content" class="main-content">
+            <div class="table-container">
+                <!-- Table headers -->
+                <div id="table-header" class="table-header">
+                    <!-- Headers dynamically injected here -->
+                </div>
+
+                <!-- Table body (rows) -->
+                <div id="table-body" class="table-body">
+                    <!-- Rows dynamically injected here -->
+                </div>
+            </div>
+        </main>
+
+        <!-- Error or connection status overlay -->
+        <div id="status-overlay" class="status-overlay">
+            <div id="status-text" class="status-text">WAITING FOR DATA</div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
