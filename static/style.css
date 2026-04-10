@@ -122,7 +122,7 @@ body, html {
 
 /* Animations and Colors */
 .fade-in {
-    animation: fadeIn 0.5s ease forwards;
+    animation: fadeIn 1s ease forwards;
 }
 
 .fade-out {
@@ -130,7 +130,7 @@ body, html {
 }
 
 .pulse-new {
-    animation: pulseNew 1s ease forwards;
+    animation: pulseNew 1.66s ease-in-out 3 forwards;
 }
 
 .value-change {
@@ -181,7 +181,8 @@ body, html {
 }
 
 @keyframes pulseNew {
-    0% { background-color: var(--accent-green); }
+    0% { background-color: transparent; }
+    50% { background-color: var(--accent-green); }
     100% { background-color: transparent; }
 }
 
