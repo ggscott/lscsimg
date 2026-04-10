@@ -100,30 +100,29 @@ async def websocket_endpoint(websocket: WebSocket, region_name: str, render_type
     pubsub = redis_client.pubsub()
     await pubsub.subscribe(channel_name)
 
+    # Task to listen to Redis and forward to WebSocket
+    async def redis_reader():
+        try:
+            async for message in pubsub.listen():
+                if message['type'] == 'message':
+                    await websocket.send_text(message['data'])
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Redis reader error: {e}")
+
+    redis_task = asyncio.create_task(redis_reader())
+
     try:
+        # Task to listen to WebSocket (to detect client disconnect)
         while True:
-            # We use get_message with a small timeout so we can also check if the client is still connected
-            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-            if message and message['type'] == 'message':
-                await websocket.send_text(message['data'])
-
-            # Non-blocking receive to check if client disconnected
-            try:
-                # If receive gets a message, we do nothing with it.
-                # If it raises WebSocketDisconnect, the except block below catches it.
-                # Use a small timeout or no-wait if possible, but asyncio.wait_for is standard
-                await asyncio.wait_for(websocket.receive(), timeout=0.01)
-            except asyncio.TimeoutError:
-                pass
-
-            # Periodically ping the client or check state if needed, though asyncio handles disconnection
-            # during send usually. To detect disconnect when idle:
-            # Note: Receive might block. We can just rely on the next send failing or a keepalive ping.
+            await websocket.receive()
     except WebSocketDisconnect:
         logger.info(f"Client disconnected from {channel_name}")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
     finally:
+        redis_task.cancel()
         await pubsub.unsubscribe(channel_name)
         await pubsub.close()
 
