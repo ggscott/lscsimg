@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const regionName = pathParts[1] || 'Unknown';
     const renderType = pathParts[2] || 'sim';
 
-    document.title = `THE_LIFESTREAM [${renderType.toUpperCase()}]`;
+    document.title = `The Lifestream`;
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${wsProtocol}//${window.location.host}/ws/${regionName}/${renderType}`;
@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('sparkline');
     const ctx = canvas.getContext('2d');
 
-    headerTitle.textContent = `THE_LIFESTREAM [${renderType.toUpperCase()}]`;
+    headerTitle.textContent = `The Lifestream`;
 
     // Set up table headers based on type
     if (renderType === 'sim') {
