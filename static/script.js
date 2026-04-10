@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const regionName = pathParts[1] || 'Unknown';
     const renderType = pathParts[2] || 'sim';
 
-    document.title = `THE LIFESTREAM [${renderType.toUpperCase()}]`;
+    document.title = `THE_LIFESTREAM [${renderType.toUpperCase()}]`;
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${wsProtocol}//${window.location.host}/ws/${regionName}/${renderType}`;
