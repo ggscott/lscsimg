@@ -710,7 +710,7 @@ def render_zone_frame(f, frames, data, prev_data, regionName, history):
                     status = rZone.rezStatusText.lower()
                     if status in ["deployed", "rezzing"]:
                         statusColor = ACCENT_GREEN
-                    elif status in ["not deployed", "derezzing"]:
+                    elif status in ["idle", "derezzing"]:
                         statusColor = ACCENT_ORANGE
                 else:
                     statusColor = BORDER_COLOR
