@@ -62,10 +62,10 @@ body, html {
 .stat-box {
     display: flex;
     flex-direction: column;
-    background: var(--row-bg);
-    border: 1px solid var(--border-color);
-    padding: 1vh 1vw;
-    border-radius: 4px;
+
+
+
+
 }
 
 .stat-label {
