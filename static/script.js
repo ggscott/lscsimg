@@ -338,8 +338,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const paddedScriptsStr = "  " + rawScriptsStr + "  ";
 
         const time = item.time || 0.0;
+        const timeMs_display = time * 1000.0;
         // Right align to 9: ##.## ms
-        const paddedTimeStr = padLeft(`${time.toFixed(2)} ms`, 7);
+        const paddedTimeStr = padLeft(`${timeMs_display.toFixed(2)} ms`, 7);
 
         const mem = item.memory || 0;
         // Forced MB, 1 decimal place. Right aligned to 9.
@@ -356,7 +357,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevScriptsText = prevItem ? `  ${padLeft(prevTotal, 3)} / ${padRight(prevActive, 3)}  ` : null;
 
         const prevTime = prevItem?.time || 0.0;
-        const prevTimeText = prevItem ? padLeft(`${prevTime.toFixed(2)} ms`, 10) : null;
+        const prevTimeMs_display = prevTime * 1000.0;
+        const prevTimeText = prevItem ? padLeft(`${prevTimeMs_display.toFixed(2)} ms`, 10) : null;
 
         const prevMem = prevItem?.memory || 0;
         const prevMemMB = prevItem ? (prevMem / (1024.0 * 1024.0)).toFixed(1) : null;
@@ -364,16 +366,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const prevComplexityText = prevItem ? padLeft(String(prevItem.complexity || 0), 7) : null;
 
-        const scriptClass = getDiffClass(paddedScriptsStr, prevScriptsText, isNew);
+        let timeStateClass = '';
+        const timeMs = parseFloat(time) * 1000;
+        if (timeMs > 5.0) timeStateClass = 'val-bad';
+        else if (timeMs > 1.0) timeStateClass = 'val-warn';
+
+        let memStateClass = '';
+        const memMB_num = mem / (1024.0 * 1024.0);
+        if (memMB_num > 10.0) memStateClass = 'val-bad';
+        else if (memMB_num > 7.0) memStateClass = 'val-warn';
+
+        let cmplxStateClass = '';
+        if (complexity > 500000) cmplxStateClass = 'val-bad';
+        else if (complexity > 200000) cmplxStateClass = 'val-warn';
+
+        const scriptDiffClass = getDiffClass(paddedScriptsStr, prevScriptsText, isNew);
+        const scriptClass = scriptDiffClass;
         const scriptHtml = scriptClass ? `<span class="${scriptClass}">${escapeHtml(paddedScriptsStr)}</span>` : escapeHtml(paddedScriptsStr);
 
-        const timeClass = getDiffClass(paddedTimeStr, prevTimeText, isNew);
+        const timeDiffClass = getDiffClass(paddedTimeStr, prevTimeText, isNew);
+        const timeClass = [timeDiffClass, timeStateClass].filter(Boolean).join(' ');
         const timeHtml = timeClass ? `<span class="${timeClass}">${escapeHtml(paddedTimeStr)}</span>` : escapeHtml(paddedTimeStr);
 
-        const memClass = getDiffClass(paddedMemStr, prevMemText, isNew);
+        const memDiffClass = getDiffClass(paddedMemStr, prevMemText, isNew);
+        const memClass = [memDiffClass, memStateClass].filter(Boolean).join(' ');
         const memHtml = memClass ? `<span class="${memClass}">${escapeHtml(paddedMemStr)}</span>` : escapeHtml(paddedMemStr);
 
-        const cmplxClass = getDiffClass(paddedCmplxStr, prevComplexityText, isNew);
+        const cmplxDiffClass = getDiffClass(paddedCmplxStr, prevComplexityText, isNew);
+        const cmplxClass = [cmplxDiffClass, cmplxStateClass].filter(Boolean).join(' ');
         const cmplxHtml = cmplxClass ? `<span class="${cmplxClass}">${escapeHtml(paddedCmplxStr)}</span>` : escapeHtml(paddedCmplxStr);
 
         // Combine with 3-space gutters.
