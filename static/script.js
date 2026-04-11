@@ -142,16 +142,14 @@ document.addEventListener('DOMContentLoaded', () => {
             let otherUsers = [];
 
             users.forEach(user => {
-                const isOOC = user.isOOC || false;
-                // Treat undefined isRegistered as false
-                const isRegistered = !!user.isRegistered;
+                const category = user.category !== undefined ? user.category : 0;
 
-                if (!isRegistered) {
-                    otherUsers.push(user);
-                } else if (isOOC) {
+                if (category === 0) {
+                    icUsers.push(user);
+                } else if (category === 1) {
                     oocUsers.push(user);
                 } else {
-                    icUsers.push(user);
+                    otherUsers.push(user);
                 }
             });
 
@@ -254,8 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateSimRow(rowEl, item, prevItem, isNew) {
         let name = item.name || 'Unknown';
-        const isOOC = item.isOOC || false;
-        const isRegistered = !!item.isRegistered;
+        const category = item.category !== undefined ? item.category : 0;
 
         if (item.display_name) {
             name = item.display_name;
@@ -302,12 +299,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevComplexityText = prevItem ? String(prevItem.complexity || 0) : null;
 
         let nameDisplayHtml = name;
-        if (!isRegistered) {
-            nameDisplayHtml = name; // Just the name for unregistered
-        } else if (isOOC) {
+        if (category === 0) {
+            nameDisplayHtml = `<span class="val-good">&lt;&lt;</span>${name}<span class="val-good">&gt;&gt;</span>`;
+        } else if (category === 1) {
             nameDisplayHtml = `<span class="val-ooc">OOC:</span>${name}`;
         } else {
-            nameDisplayHtml = `<span class="val-good">&lt;&lt;</span>${name}<span class="val-good">&gt;&gt;</span>`;
+            nameDisplayHtml = name; // Just the name for others
         }
 
         const nameHtml = `<div class="col-1">${nameDisplayHtml}</div>`;
