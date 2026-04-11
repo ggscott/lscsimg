@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Gutters: 3 spaces between each.
         // Total chars: 30 + 3 + 13 + 3 + 10 + 3 + 9 + 3 + 7 = 81
         const headerStr = padRight("USER", 30) + "   " +
-                          padRight("SCRIPTS (T/A)", 17) + "   " +
+                          padRight("SCRIPTS (T/A)", 14) + "   " +
                           padRight("TIME", 10) + "   " +
                           padRight("MEMORY", 9) + "   " +
                           padRight("CMPLX", 7);
@@ -339,7 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const time = item.time || 0.0;
         // Right align to 9: ##.## ms
-        const paddedTimeStr = padLeft(`${time.toFixed(2)} ms`, 10);
+        const paddedTimeStr = padLeft(`${time.toFixed(2)} ms`, 7);
 
         const mem = item.memory || 0;
         // Forced MB, 1 decimal place. Right aligned to 9.
