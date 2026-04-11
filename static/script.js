@@ -47,6 +47,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="col-5">STATE</div>
         `;
         chartContainer.style.display = 'block';
+
+        // Move Remaining Prims header left so it doesn't obscure sparkline
+        const statsHeader = document.getElementById('stats-header');
+        if (statsHeader) {
+            statsHeader.style.justifyContent = 'flex-start';
+            statsHeader.style.gap = '4vw';
+        }
     }
 
 
@@ -208,6 +215,22 @@ document.addEventListener('DOMContentLoaded', () => {
             newItems = [...icUsers, ...oocUsers, ...otherUsers];
         } else {
             newItems = data.zones || [];
+
+            // Sort by occupancy descending, then alphabetically by name
+            newItems.sort((a, b) => {
+                const occA = parseInt(a.occupancyText) || 0;
+                const occB = parseInt(b.occupancyText) || 0;
+
+                if (occA !== occB) {
+                    return occB - occA; // Descending
+                }
+
+                let nameA = (a.name || '').toLowerCase();
+                let nameB = (b.name || '').toLowerCase();
+                if (nameA < nameB) return -1;
+                if (nameA > nameB) return 1;
+                return 0;
+            });
         }
 
         renderTable(newItems, isSim);
@@ -239,6 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         topStats.innerHTML = statsHtml;
     }
+
+    let scrollAnimationFrame = null;
 
     function renderTable(newItems, isSim) {
         const currentMap = new Map();
@@ -274,19 +299,64 @@ document.addEventListener('DOMContentLoaded', () => {
                 rowEl = document.createElement('div');
                 rowEl.id = `row-${key}`;
                 rowEl.className = 'row pulse-new';
-                tableBody.appendChild(rowEl);
             }
 
-            rowEl.style.transform = `translateY(${index * rowHeightVH}vh)`;
+            // Re-append to ensure DOM order matches array order (for sticky/relative positioning)
+            tableBody.appendChild(rowEl);
 
             if (isSim) {
+                rowEl.style.position = 'absolute';
+                rowEl.style.transform = `translateY(${index * rowHeightVH}vh)`;
                 updateSimRow(rowEl, item, prevItem, isNew);
             } else {
+                const occ = parseInt(item.occupancyText) || 0;
+                rowEl.style.transform = 'none'; // remove translate transform
+                if (occ > 0) {
+                    rowEl.style.position = 'sticky';
+                    rowEl.style.top = `${index * rowHeightVH}vh`;
+                    rowEl.style.zIndex = '10'; // ensure sticky elements stay above scrolling ones
+                    rowEl.style.backgroundColor = 'var(--bg-color)'; // opaque background to hide scrolling elements underneath
+                } else {
+                    rowEl.style.position = 'relative';
+                    rowEl.style.top = 'auto';
+                    rowEl.style.zIndex = '1';
+                    rowEl.style.backgroundColor = 'transparent';
+                }
                 updateZoneRow(rowEl, item, prevItem, isNew);
             }
         });
 
         currentState = newItems;
+
+        if (!isSim) {
+            startAutoScroll();
+        }
+    }
+
+    function startAutoScroll() {
+        if (scrollAnimationFrame) {
+            cancelAnimationFrame(scrollAnimationFrame);
+        }
+
+        let scrollPos = tableBody.scrollTop;
+        const scrollSpeed = 0.5; // adjust for speed
+
+        function scrollStep() {
+            // max scrollable height
+            const maxScroll = tableBody.scrollHeight - tableBody.clientHeight;
+
+            if (maxScroll > 0) {
+                scrollPos += scrollSpeed;
+                if (scrollPos >= maxScroll) {
+                    // reset to top when reaching bottom
+                    scrollPos = 0;
+                }
+                tableBody.scrollTop = scrollPos;
+            }
+            scrollAnimationFrame = requestAnimationFrame(scrollStep);
+        }
+
+        scrollAnimationFrame = requestAnimationFrame(scrollStep);
     }
 
     function updateSimRow(rowEl, item, prevItem, isNew) {

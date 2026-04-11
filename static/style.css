@@ -133,6 +133,12 @@ body, html {
     flex: 1;
     overflow-y: auto;
     position: relative;
+    /* Hide scrollbar */
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+.table-body::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
 }
 
 .row {
@@ -143,7 +149,9 @@ body, html {
     align-items: center;
     position: absolute;
     width: 100%;
+    height: 6vh;
     transition: transform 0.5s ease;
+    background-color: var(--bg-color);
 }
 
 /* Animations and Colors */
@@ -207,9 +215,9 @@ body, html {
 }
 
 @keyframes pulseNew {
-    0% { background-color: transparent; }
+    0% { background-color: var(--bg-color); }
     50% { background-color: var(--accent-green); }
-    100% { background-color: transparent; }
+    100% { background-color: var(--bg-color); }
 }
 
 @keyframes flashCyan {
