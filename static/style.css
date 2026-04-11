@@ -39,6 +39,30 @@ body, html {
     position: relative;
 }
 
+.dashboard::before {
+    content: "";
+    position: absolute;
+    top: 1vw;
+    left: 1vw;
+    right: 1vw;
+    bottom: 1vw;
+    pointer-events: none;
+    z-index: 500;
+    background:
+        /* Top-Left */
+        linear-gradient(var(--accent-cyan), var(--accent-cyan)) top left / 50px 4px no-repeat,
+        linear-gradient(var(--accent-cyan), var(--accent-cyan)) top left / 4px 50px no-repeat,
+        /* Top-Right */
+        linear-gradient(var(--accent-cyan), var(--accent-cyan)) top right / 50px 4px no-repeat,
+        linear-gradient(var(--accent-cyan), var(--accent-cyan)) top right / 4px 50px no-repeat,
+        /* Bottom-Left */
+        linear-gradient(var(--accent-cyan), var(--accent-cyan)) bottom left / 50px 4px no-repeat,
+        linear-gradient(var(--accent-cyan), var(--accent-cyan)) bottom left / 4px 50px no-repeat,
+        /* Bottom-Right */
+        linear-gradient(var(--accent-cyan), var(--accent-cyan)) bottom right / 50px 4px no-repeat,
+        linear-gradient(var(--accent-cyan), var(--accent-cyan)) bottom right / 4px 50px no-repeat;
+}
+
 .header {
     display: flex;
     flex-direction: column;
