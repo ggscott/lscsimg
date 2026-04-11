@@ -134,7 +134,41 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update Table
         let newItems = [];
         if (isSim) {
-            newItems = data.users || [];
+            let users = data.users || [];
+
+            // Group users: IC, OOC, Others
+            let icUsers = [];
+            let oocUsers = [];
+            let otherUsers = [];
+
+            users.forEach(user => {
+                const isOOC = user.isOOC || false;
+                // Treat undefined isRegistered as false
+                const isRegistered = !!user.isRegistered;
+
+                if (!isRegistered) {
+                    otherUsers.push(user);
+                } else if (isOOC) {
+                    oocUsers.push(user);
+                } else {
+                    icUsers.push(user);
+                }
+            });
+
+            // Sort each group alphabetically by display name or name (case-insensitive)
+            const sortFn = (a, b) => {
+                let nameA = (a.display_name || a.name || '').toLowerCase();
+                let nameB = (b.display_name || b.name || '').toLowerCase();
+                if (nameA < nameB) return -1;
+                if (nameA > nameB) return 1;
+                return 0;
+            };
+
+            icUsers.sort(sortFn);
+            oocUsers.sort(sortFn);
+            otherUsers.sort(sortFn);
+
+            newItems = [...icUsers, ...oocUsers, ...otherUsers];
         } else {
             newItems = data.zones || [];
         }
@@ -220,11 +254,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateSimRow(rowEl, item, prevItem, isNew) {
         let name = item.name || 'Unknown';
-        name = (name || "").toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         const isOOC = item.isOOC || false;
-        if (isOOC && item.display_name) {
+        const isRegistered = !!item.isRegistered;
+
+        if (item.display_name) {
             name = item.display_name;
         }
+        name = (name || "").toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 
         const total = item.total || 0;
         const active = item.active || 0;
@@ -265,7 +301,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const prevComplexityText = prevItem ? String(prevItem.complexity || 0) : null;
 
-        const nameHtml = `<div class="col-1 ${nameClass}">${name} ${isOOC ? '(OOC)' : ''}</div>`;
+        let nameDisplayHtml = name;
+        if (!isRegistered) {
+            nameDisplayHtml = name; // Just the name for unregistered
+        } else if (isOOC) {
+            nameDisplayHtml = `<span class="val-ooc">OOC:</span>${name}`;
+        } else {
+            nameDisplayHtml = `<span class="val-good">&lt;&lt;</span>${name}<span class="val-good">&gt;&gt;</span>`;
+        }
+
+        const nameHtml = `<div class="col-1">${nameDisplayHtml}</div>`;
         const scriptHtml = `<div class="col-2 ${getDiffClass(scriptsText, prevScriptsText, isNew)}">${scriptsText}</div>`;
         const timeHtml = `<div class="col-3 ${getDiffClass(timeText, prevTimeText, isNew)}">${timeText}</div>`;
         const memHtml = `<div class="col-4 ${getDiffClass(memoryText, prevMemoryText, isNew)}">${memoryText}</div>`;
