@@ -276,8 +276,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const complexityText = String(item.complexity || 0);
 
-        let nameClass = isOOC ? 'val-ooc' : '';
-
         // Determine if text values changed for flash
         const prevTotal = prevItem?.total || 0;
         const prevActive = prevItem?.active || 0;
