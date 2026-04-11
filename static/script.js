@@ -153,8 +153,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // Sort each group alphabetically by display name or name (case-insensitive)
-            const sortFn = (a, b) => {
+            // Sort each group alphabetically
+            const sortFnIC = (a, b) => {
+                let nameA = (a.name || '').toLowerCase();
+                let nameB = (b.name || '').toLowerCase();
+                if (nameA < nameB) return -1;
+                if (nameA > nameB) return 1;
+                return 0;
+            };
+
+            const sortFnOOC = (a, b) => {
                 let nameA = (a.display_name || a.name || '').toLowerCase();
                 let nameB = (b.display_name || b.name || '').toLowerCase();
                 if (nameA < nameB) return -1;
@@ -162,9 +170,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 return 0;
             };
 
-            icUsers.sort(sortFn);
-            oocUsers.sort(sortFn);
-            otherUsers.sort(sortFn);
+            icUsers.sort(sortFnIC);
+            oocUsers.sort(sortFnOOC);
+            otherUsers.sort(sortFnIC);
 
             newItems = [...icUsers, ...oocUsers, ...otherUsers];
         } else {
@@ -254,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let name = item.name || 'Unknown';
         const category = item.category !== undefined ? item.category : 0;
 
-        if (item.display_name) {
+        if (category === 1 && item.display_name) {
             name = item.display_name;
         }
         name = (name || "").toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
