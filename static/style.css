@@ -145,10 +145,10 @@ body, html {
 
 /* Column Widths */
 .col-1 { flex: 0 0 40%; }
-.col-2 { flex: 0 0 15%; text-align: right; }
+.col-2 { flex: 0 0 20%; text-align: right; }
 .col-3 { flex: 0 0 15%; text-align: right; }
 .col-4 { flex: 0 0 15%; text-align: right; }
-.col-5 { flex: 0 0 15%; text-align: right; }
+.col-5 { flex: 0 0 10%; text-align: right; }
 
 .status-overlay {
     position: absolute;
