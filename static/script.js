@@ -206,6 +206,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Start animation loop
     requestAnimationFrame(drawSparkline);
 
+    function isActiveDynamic(item) {
+        const isDyn = (item.isDynamic !== undefined ? item.isDynamic : ((item.dynamicText || 'Static').toLowerCase() !== 'static'));
+        const status = (item.rezStatusText || '').toLowerCase();
+        return isDyn && status !== 'idle' && status !== '';
+    }
+
     function handleData(payload) {
         const data = payload.data || {};
         const primsHistory = payload.primsHistory || [];
@@ -265,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             newItems = data.zones || [];
 
-            // Sort by occupancy descending, then alphabetically by name
+            // Sort by occupancy descending, then non-Idle dynamic zones, then alphabetically by name
             newItems.sort((a, b) => {
                 const occA = parseInt(a.occupancyText) || 0;
                 const occB = parseInt(b.occupancyText) || 0;
@@ -273,6 +279,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (occA !== occB) {
                     return occB - occA; // Descending
                 }
+
+                // If occupancy is the same (usually 0), check if it's dynamic and not Idle
+                const isActiveDynA = isActiveDynamic(a);
+                const isActiveDynB = isActiveDynamic(b);
+
+                if (isActiveDynA && !isActiveDynB) return -1;
+                if (!isActiveDynA && isActiveDynB) return 1;
 
                 let nameA = (a.name || '').toLowerCase();
                 let nameB = (b.name || '').toLowerCase();
@@ -369,8 +382,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateSimRow(rowEl, item, prevItem, isNew);
             } else {
                 const occ = parseInt(item.occupancyText) || 0;
+                const isActiveDyn = isActiveDynamic(item);
+
                 rowEl.style.transform = 'none'; // remove translate transform
-                if (occ > 0) {
+                if (occ > 0 || isActiveDyn) {
                     rowEl.style.position = 'sticky';
                     rowEl.style.top = `${index * rowHeightVH}vh`;
                     rowEl.style.zIndex = '10'; // ensure sticky elements stay above scrolling ones
