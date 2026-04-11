@@ -299,10 +299,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 rowEl = document.createElement('div');
                 rowEl.id = `row-${key}`;
                 rowEl.className = 'row pulse-new';
+
+                // Remove the animation class once it finishes to prevent any accidental restarts
+                rowEl.addEventListener('animationend', (e) => {
+                    if (e.animationName === 'pulseNew') {
+                        rowEl.classList.remove('pulse-new');
+                    }
+                });
             }
 
             // Re-append to ensure DOM order matches array order (for sticky/relative positioning)
-            tableBody.appendChild(rowEl);
+            // Only move if it's not already in the correct position to avoid restarting animations
+            if (tableBody.children[index] !== rowEl) {
+                tableBody.insertBefore(rowEl, tableBody.children[index]);
+            }
 
             if (isSim) {
                 rowEl.style.position = 'absolute';
