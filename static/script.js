@@ -41,9 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         tableHeader.innerHTML = `
             <div class="col-1">ZONE</div>
-            <div class="col-2">OCCUPANCY</div>
+            <div class="col-2">DENS</div>
             <div class="col-3">DYNAMIC</div>
-            <div class="col-4">LI (EST)</div>
+            <div class="col-4">LI</div>
             <div class="col-5">STATE</div>
         `;
         chartContainer.style.display = 'block';
