@@ -27,15 +27,15 @@ document.addEventListener('DOMContentLoaded', () => {
         tableHeader.style.whiteSpace = 'pre';
         tableHeader.style.borderBottom = 'none'; // remove old css border
 
-        // Columns: USER(16), SCRIPTS(13), TIME(9), MEMORY(9), CMPLX(7)
+        // Columns: USER(30), SCRIPTS(13), TIME(10), MEMORY(9), CMPLX(7)
         // Gutters: 3 spaces between each.
-        // Total chars: 16 + 3 + 13 + 3 + 9 + 3 + 9 + 3 + 7 = 66
-        const headerStr = padRight("USER", 16) + "   " +
+        // Total chars: 30 + 3 + 13 + 3 + 10 + 3 + 9 + 3 + 7 = 81
+        const headerStr = padRight("USER", 30) + "   " +
                           padRight("SCRIPTS (T/A)", 13) + "   " +
-                          padRight("TIME (ms)", 9) + "   " +
+                          padRight("TIME (ms)", 10) + "   " +
                           padRight("MEMORY", 9) + "   " +
                           padRight("CMPLX", 7);
-        const dividerStr = "─".repeat(66);
+        const dividerStr = "─".repeat(81);
 
         tableHeader.innerHTML = `<div>${headerStr}</div><div style="color: var(--accent-cyan);">${dividerStr}</div>`;
     } else {
@@ -307,13 +307,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Truncate name if necessary so prefix+name+suffix <= 16
-        const maxNameLen = 16 - prefix.length - suffix.length;
+        const maxNameLen = 30 - prefix.length - suffix.length;
         if (name.length > maxNameLen) {
             name = name.substring(0, maxNameLen);
         }
 
         const rawUserStr = prefix + name + suffix;
-        const paddedUserStr = padRight(rawUserStr, 16);
+        const paddedUserStr = padRight(rawUserStr, 30);
 
         // Build display HTML with color spans inside the padded text
         let userHtml = escapeHtml(paddedUserStr);
@@ -339,7 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const time = item.time || 0.0;
         // Right align to 9: ##.## ms
-        const paddedTimeStr = padLeft(`${time.toFixed(2)} ms`, 9);
+        const paddedTimeStr = padLeft(`${time.toFixed(2)} ms`, 10);
 
         const mem = item.memory || 0;
         // Forced MB, 1 decimal place. Right aligned to 9.
@@ -356,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevScriptsText = prevItem ? `  ${padLeft(prevTotal, 3)} / ${padRight(prevActive, 3)}  ` : null;
 
         const prevTime = prevItem?.time || 0.0;
-        const prevTimeText = prevItem ? padLeft(`${prevTime.toFixed(2)} ms`, 9) : null;
+        const prevTimeText = prevItem ? padLeft(`${prevTime.toFixed(2)} ms`, 10) : null;
 
         const prevMem = prevItem?.memory || 0;
         const prevMemMB = prevItem ? (prevMem / (1024.0 * 1024.0)).toFixed(1) : null;
@@ -377,7 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const cmplxHtml = cmplxClass ? `<span class="${cmplxClass}">${escapeHtml(paddedCmplxStr)}</span>` : escapeHtml(paddedCmplxStr);
 
         // Combine with 3-space gutters.
-        // USER(16) + 3 + SCRIPTS(13) + 3 + TIME(9) + 3 + MEMORY(9) + 3 + CMPLX(7)
+        // USER(30) + 3 + SCRIPTS(13) + 3 + TIME(10) + 3 + MEMORY(9) + 3 + CMPLX(7)
         const rowInnerHtml = userHtml + "   " + scriptHtml + "   " + timeHtml + "   " + memHtml + "   " + cmplxHtml;
 
         rowEl.innerHTML = rowInnerHtml;
