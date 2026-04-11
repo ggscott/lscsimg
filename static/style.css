@@ -65,7 +65,9 @@ body, html {
 
 .header {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 2vh;
 }
 
@@ -74,12 +76,12 @@ body, html {
     font-size: 4vh;
     font-weight: 700;
     text-transform: uppercase;
-    margin-bottom: 1vh;
+    margin-bottom: 0;
 }
 
 .stats-container {
     display: flex;
-    gap: 2vw;
+    gap: 3ch;
     flex-wrap: wrap;
 }
 
