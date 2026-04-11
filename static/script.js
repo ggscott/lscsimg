@@ -32,10 +32,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Total chars: 30 + 3 + 13 + 3 + 10 + 3 + 9 + 3 + 7 = 81
         const headerStr = padRight("USER", 30) + "   " +
                           padRight("SCRIPTS (T/A)", 14) + "   " +
-                          padRight("TIME", 10) + "   " +
-                          padRight("MEMORY", 9) + "   " +
+                          padRight("TIME", 9) + "   " +
+                          padRight("MEMORY", 8) + "   " +
                           padRight("CMPLX", 7);
-        const dividerStr = "─".repeat(81);
+        const dividerStr = "─".repeat(91);
 
         tableHeader.innerHTML = `<div>${headerStr}</div><div style="color: var(--accent-cyan);">${dividerStr}</div>`;
     } else {
