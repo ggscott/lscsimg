@@ -48,12 +48,6 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         chartContainer.style.display = 'block';
 
-        // Move Remaining Prims header left so it doesn't obscure sparkline
-        const statsHeader = document.getElementById('stats-header');
-        if (statsHeader) {
-            statsHeader.style.justifyContent = 'flex-start';
-            statsHeader.style.gap = '4vw';
-        }
     }
 
 

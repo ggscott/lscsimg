@@ -227,9 +227,6 @@ body, html {
 
 .chart-container {
     display: none; /* Hidden by default, JS will show for Zone mode */
-    position: absolute;
-    top: 2vh;
-    right: 2vw;
     width: 200px;
     height: 50px;
 }
