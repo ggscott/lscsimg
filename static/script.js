@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
                           padRight("TIME", 9) + "   " +
                           padRight("MEMORY", 8) + "   " +
                           padRight("CMPLX", 7);
-        const dividerStr = "─".repeat(91);
+        const dividerStr = "─".repeat(89);
 
         tableHeader.innerHTML = `<div>${headerStr}</div><div style="color: var(--accent-cyan);">${dividerStr}</div>`;
     } else {
