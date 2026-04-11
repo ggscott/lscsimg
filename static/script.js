@@ -338,9 +338,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const paddedScriptsStr = "  " + rawScriptsStr + "  ";
 
         const time = item.time || 0.0;
-        const timeMs_display = time * 1000.0;
         // Right align to 9: ##.## ms
-        const paddedTimeStr = padLeft(`${timeMs_display.toFixed(2)} ms`, 7);
+        const paddedTimeStr = padLeft(`${time.toFixed(2)} ms`, 7);
 
         const mem = item.memory || 0;
         // Forced MB, 1 decimal place. Right aligned to 9.
@@ -357,8 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevScriptsText = prevItem ? `  ${padLeft(prevTotal, 3)} / ${padRight(prevActive, 3)}  ` : null;
 
         const prevTime = prevItem?.time || 0.0;
-        const prevTimeMs_display = prevTime * 1000.0;
-        const prevTimeText = prevItem ? padLeft(`${prevTimeMs_display.toFixed(2)} ms`, 10) : null;
+        const prevTimeText = prevItem ? padLeft(`${prevTime.toFixed(2)} ms`, 10) : null;
 
         const prevMem = prevItem?.memory || 0;
         const prevMemMB = prevItem ? (prevMem / (1024.0 * 1024.0)).toFixed(1) : null;
@@ -367,7 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevComplexityText = prevItem ? padLeft(String(prevItem.complexity || 0), 7) : null;
 
         let timeStateClass = '';
-        const timeMs = parseFloat(time) * 1000;
+        const timeMs = parseFloat(time);
         if (timeMs > 5.0) timeStateClass = 'val-bad';
         else if (timeMs > 1.0) timeStateClass = 'val-warn';
 
