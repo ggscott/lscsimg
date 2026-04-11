@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Total chars: 30 + 3 + 13 + 3 + 10 + 3 + 9 + 3 + 7 = 81
         const headerStr = padRight("USER", 30) + "   " +
                           padRight("SCRIPTS (T/A)", 13) + "   " +
-                          padRight("TIME (ms)", 10) + "   " +
+                          padRight("TIME", 10) + "   " +
                           padRight("MEMORY", 9) + "   " +
                           padRight("CMPLX", 7);
         const dividerStr = "─".repeat(81);
