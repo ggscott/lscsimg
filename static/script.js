@@ -23,13 +23,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Set up table headers based on type
     if (renderType === 'sim') {
-        tableHeader.innerHTML = `
-            <div class="col-1">USER</div>
-            <div class="col-2">SCRIPTS (T/A)</div>
-            <div class="col-3">TIME (ms)</div>
-            <div class="col-4">MEMORY</div>
-            <div class="col-5">CMPLX</div>
-        `;
+        tableHeader.style.display = 'block';
+        tableHeader.style.whiteSpace = 'pre';
+        tableHeader.style.borderBottom = 'none'; // remove old css border
+
+        // Columns: USER(16), SCRIPTS(13), TIME(9), MEMORY(9), CMPLX(7)
+        // Gutters: 3 spaces between each.
+        // Total chars: 16 + 3 + 13 + 3 + 9 + 3 + 9 + 3 + 7 = 66
+        const headerStr = padRight("USER", 16) + "   " +
+                          padRight("SCRIPTS (T/A)", 13) + "   " +
+                          padRight("TIME (ms)", 9) + "   " +
+                          padRight("MEMORY", 9) + "   " +
+                          padRight("CMPLX", 7);
+        const dividerStr = "─".repeat(66);
+
+        tableHeader.innerHTML = `<div>${headerStr}</div><div style="color: var(--accent-cyan);">${dividerStr}</div>`;
     } else {
         tableHeader.innerHTML = `
             <div class="col-1">ZONE</div>
@@ -39,6 +47,29 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="col-5">STATE</div>
         `;
         chartContainer.style.display = 'block';
+    }
+
+
+    // --- Padding Helpers ---
+    function padRight(str, length) {
+        str = String(str);
+        if (str.length >= length) return str.substring(0, length);
+        return str + ' '.repeat(length - str.length);
+    }
+
+    function padLeft(str, length) {
+        str = String(str);
+        if (str.length >= length) return str.substring(0, length);
+        return ' '.repeat(length - str.length) + str;
+    }
+
+    function escapeHtml(unsafe) {
+        return (unsafe || "").toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
     let currentState = [];
@@ -265,61 +296,92 @@ document.addEventListener('DOMContentLoaded', () => {
         if (category === 1 && item.display_name) {
             name = item.display_name;
         }
-        name = (name || "").toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+
+        let prefix = "";
+        let suffix = "";
+        if (category === 0) {
+            prefix = "<<";
+            suffix = ">>";
+        } else if (category === 1) {
+            prefix = "OOC:";
+        }
+
+        // Truncate name if necessary so prefix+name+suffix <= 16
+        const maxNameLen = 16 - prefix.length - suffix.length;
+        if (name.length > maxNameLen) {
+            name = name.substring(0, maxNameLen);
+        }
+
+        const rawUserStr = prefix + name + suffix;
+        const paddedUserStr = padRight(rawUserStr, 16);
+
+        // Build display HTML with color spans inside the padded text
+        let userHtml = escapeHtml(paddedUserStr);
+        if (category === 0) {
+            // Apply val-good color to the << and >>
+            userHtml = userHtml.replace("&lt;&lt;", '<span class="val-good">&lt;&lt;</span>');
+            userHtml = userHtml.replace("&gt;&gt;", '<span class="val-good">&gt;&gt;</span>');
+        } else if (category === 1) {
+            userHtml = userHtml.replace("OOC:", '<span class="val-ooc">OOC:</span>');
+        }
 
         const total = item.total || 0;
         const active = item.active || 0;
-        const scriptsText = `${total} / ${active}`;
+
+        // Format scripts: 3 chars right aligned, " / ", 3 chars left aligned
+        const tStr = padLeft(total, 3);
+        const aStr = padRight(active, 3);
+        const rawScriptsStr = `${tStr} / ${aStr}`;
+        // The length of rawScriptsStr is exactly 3 + 3 + 3 = 9.
+        // We want it centered in 13.
+        // Left pad 2, right pad 2.
+        const paddedScriptsStr = "  " + rawScriptsStr + "  ";
 
         const time = item.time || 0.0;
-        const timeText = `${time.toFixed(2)} ms`;
+        // Right align to 9: ##.## ms
+        const paddedTimeStr = padLeft(`${time.toFixed(2)} ms`, 9);
 
         const mem = item.memory || 0;
-        let memoryText = '';
-        if (mem < 1024 * 1024) {
-            memoryText = `${Math.floor(mem / 1024)} kB`;
-        } else {
-            memoryText = `${(mem / (1024.0 * 1024.0)).toFixed(1)} MB`;
-        }
+        // Forced MB, 1 decimal place. Right aligned to 9.
+        const memMB = (mem / (1024.0 * 1024.0)).toFixed(1);
+        const paddedMemStr = padLeft(`${memMB} MB`, 9);
 
-        const complexityText = String(item.complexity || 0);
+        const complexity = item.complexity || 0;
+        // Right aligned to 7.
+        const paddedCmplxStr = padLeft(String(complexity), 7);
 
         // Determine if text values changed for flash
         const prevTotal = prevItem?.total || 0;
         const prevActive = prevItem?.active || 0;
-        const prevScriptsText = prevItem ? `${prevTotal} / ${prevActive}` : null;
+        const prevScriptsText = prevItem ? `  ${padLeft(prevTotal, 3)} / ${padRight(prevActive, 3)}  ` : null;
 
         const prevTime = prevItem?.time || 0.0;
-        const prevTimeText = prevItem ? `${prevTime.toFixed(2)} ms` : null;
+        const prevTimeText = prevItem ? padLeft(`${prevTime.toFixed(2)} ms`, 9) : null;
 
         const prevMem = prevItem?.memory || 0;
-        let prevMemoryText = null;
-        if (prevItem) {
-             if (prevMem < 1024 * 1024) {
-                prevMemoryText = `${Math.floor(prevMem / 1024)} kB`;
-            } else {
-                prevMemoryText = `${(prevMem / (1024.0 * 1024.0)).toFixed(1)} MB`;
-            }
-        }
+        const prevMemMB = prevItem ? (prevMem / (1024.0 * 1024.0)).toFixed(1) : null;
+        const prevMemText = prevItem ? padLeft(`${prevMemMB} MB`, 9) : null;
 
-        const prevComplexityText = prevItem ? String(prevItem.complexity || 0) : null;
+        const prevComplexityText = prevItem ? padLeft(String(prevItem.complexity || 0), 7) : null;
 
-        let nameDisplayHtml = name;
-        if (category === 0) {
-            nameDisplayHtml = `<span class="val-good">&lt;&lt;</span>${name}<span class="val-good">&gt;&gt;</span>`;
-        } else if (category === 1) {
-            nameDisplayHtml = `<span class="val-ooc">OOC:</span>${name}`;
-        } else {
-            nameDisplayHtml = name; // Just the name for others
-        }
+        const scriptClass = getDiffClass(paddedScriptsStr, prevScriptsText, isNew);
+        const scriptHtml = scriptClass ? `<span class="${scriptClass}">${escapeHtml(paddedScriptsStr)}</span>` : escapeHtml(paddedScriptsStr);
 
-        const nameHtml = `<div class="col-1">${nameDisplayHtml}</div>`;
-        const scriptHtml = `<div class="col-2 ${getDiffClass(scriptsText, prevScriptsText, isNew)}">${scriptsText}</div>`;
-        const timeHtml = `<div class="col-3 ${getDiffClass(timeText, prevTimeText, isNew)}">${timeText}</div>`;
-        const memHtml = `<div class="col-4 ${getDiffClass(memoryText, prevMemoryText, isNew)}">${memoryText}</div>`;
-        const cmplxHtml = `<div class="col-5 ${getDiffClass(complexityText, prevComplexityText, isNew)}">${complexityText}</div>`;
+        const timeClass = getDiffClass(paddedTimeStr, prevTimeText, isNew);
+        const timeHtml = timeClass ? `<span class="${timeClass}">${escapeHtml(paddedTimeStr)}</span>` : escapeHtml(paddedTimeStr);
 
-        rowEl.innerHTML = nameHtml + scriptHtml + timeHtml + memHtml + cmplxHtml;
+        const memClass = getDiffClass(paddedMemStr, prevMemText, isNew);
+        const memHtml = memClass ? `<span class="${memClass}">${escapeHtml(paddedMemStr)}</span>` : escapeHtml(paddedMemStr);
+
+        const cmplxClass = getDiffClass(paddedCmplxStr, prevComplexityText, isNew);
+        const cmplxHtml = cmplxClass ? `<span class="${cmplxClass}">${escapeHtml(paddedCmplxStr)}</span>` : escapeHtml(paddedCmplxStr);
+
+        // Combine with 3-space gutters.
+        // USER(16) + 3 + SCRIPTS(13) + 3 + TIME(9) + 3 + MEMORY(9) + 3 + CMPLX(7)
+        const rowInnerHtml = userHtml + "   " + scriptHtml + "   " + timeHtml + "   " + memHtml + "   " + cmplxHtml;
+
+        rowEl.innerHTML = rowInnerHtml;
+        rowEl.classList.add('sim-row');
     }
 
     function updateZoneRow(rowEl, item, prevItem, isNew) {

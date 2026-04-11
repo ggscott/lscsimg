@@ -199,3 +199,9 @@ body, html {
     width: 200px;
     height: 50px;
 }
+
+/* Override flexbox for sim rows */
+.sim-row {
+    display: block;
+    white-space: pre;
+}
