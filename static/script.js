@@ -107,8 +107,14 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    function drawSparkline(history) {
-        if (!history || history.length < 2) return;
+    let latestPrimsHistory = [];
+
+    function drawSparkline(timestamp) {
+        const history = latestPrimsHistory;
+        if (!history || history.length < 2) {
+            requestAnimationFrame(drawSparkline);
+            return;
+        }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -149,7 +155,56 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.strokeStyle = "#00ffd1"; // ACCENT_CYAN
         ctx.lineWidth = 2;
         ctx.stroke();
+
+        // Draw ticks aligned with data points
+        ctx.beginPath();
+        points.forEach(p => {
+            ctx.moveTo(p.x, 0);
+            ctx.lineTo(p.x, chartH);
+        });
+        ctx.strokeStyle = "rgba(0, 255, 209, 0.15)"; // Faint cyan ticks
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Draw 3-second sweep
+        const cycle = 3000; // 3 seconds
+        const t = (timestamp % cycle) / cycle;
+        const sweepX = t * chartW;
+
+        // Draw fading trail behind sweep
+        const trailWidth = 40;
+        const gradient = ctx.createLinearGradient(sweepX - trailWidth, 0, sweepX, 0);
+        gradient.addColorStop(0, "rgba(0, 255, 209, 0)");
+        gradient.addColorStop(1, "rgba(0, 255, 209, 0.4)");
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(sweepX - trailWidth, 0, trailWidth, chartH);
+
+        // Handle wrap around trail
+        if (sweepX < trailWidth) {
+            const overflow = trailWidth - sweepX;
+            const wrapGradient = ctx.createLinearGradient(chartW - overflow, 0, chartW, 0);
+            wrapGradient.addColorStop(0, "rgba(0, 255, 209, 0)");
+            // Interpolate the max opacity based on how much has wrapped
+            const startOpacity = 0.4 * (overflow / trailWidth);
+            wrapGradient.addColorStop(1, `rgba(0, 255, 209, ${startOpacity})`);
+            ctx.fillStyle = wrapGradient;
+            ctx.fillRect(chartW - overflow, 0, overflow, chartH);
+        }
+
+        // Draw sweeping line
+        ctx.beginPath();
+        ctx.moveTo(sweepX, 0);
+        ctx.lineTo(sweepX, chartH);
+        ctx.strokeStyle = "rgba(0, 255, 209, 0.8)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        requestAnimationFrame(drawSparkline);
     }
+
+    // Start animation loop
+    requestAnimationFrame(drawSparkline);
 
     function handleData(payload) {
         const data = payload.data || {};
@@ -157,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isSim = renderType === 'sim';
 
         if (!isSim && primsHistory.length > 0) {
-            drawSparkline(primsHistory);
+            latestPrimsHistory = primsHistory;
         }
 
         // Update Stats
