@@ -489,7 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dynamicText = item.dynamicText || "Static";
         const liEstText = item.liEstText || "-";
         const rezStatusText = item.rezStatusText || "-";
-        const isDynamic = item.isDynamic || false;
+        const isDynamic = item.isDynamic !== undefined ? item.isDynamic : (dynamicText.toLowerCase() !== 'static');
 
         let stateClass = '';
         if (isDynamic) {
