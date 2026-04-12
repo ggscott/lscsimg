@@ -577,9 +577,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevRez = prevItem?.rezStatusText || null;
 
         const nameHtml = `<div class="col-1">${name}</div>`;
-        const occHtml = `<div class="col-2 ${getDiffClass(occupancyText, prevOcc, isNew)}">${occupancyText}</div>`;
+        let occColorClass = '';
+        if (parseInt(occupancyText) > 0) {
+            occColorClass = 'val-good';
+        }
+
+        let liColorClass = '';
+        if (liEstText === '-' || liEstText === '~') {
+            liColorClass = 'val-dim';
+        }
+
+        const occHtml = `<div class="col-2 ${occColorClass} ${getDiffClass(occupancyText, prevOcc, isNew)}">${occupancyText}</div>`;
         const dynHtml = `<div class="col-3 ${dynColorClass} ${getDiffClass(dynamicText, prevDyn, isNew)}">${dynamicText}</div>`;
-        const liHtml = `<div class="col-4 ${getDiffClass(liEstText, prevLi, isNew)}">${liEstText}</div>`;
+        const liHtml = `<div class="col-4 ${liColorClass} ${getDiffClass(liEstText, prevLi, isNew)}">${liEstText}</div>`;
         const stateHtml = `<div class="col-5 ${stateClass} ${getDiffClass(rezStatusText, prevRez, isNew)}">${rezStatusText}</div>`;
 
         rowEl.innerHTML = nameHtml + occHtml + dynHtml + liHtml + stateHtml;
