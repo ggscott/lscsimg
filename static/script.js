@@ -555,6 +555,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const rezStatusText = item.rezStatusText || "-";
         const isDynamic = item.isDynamic !== undefined ? item.isDynamic : (dynamicText.toLowerCase() !== 'static');
 
+        let dynColorClass = '';
+        if (dynamicText === "Missing") {
+            dynColorClass = 'val-bad';
+        } else if (dynamicText === "No Comms") {
+            dynColorClass = 'val-warn';
+        }
+
         let stateClass = '';
         if (isDynamic) {
             const statusLower = rezStatusText.toLowerCase();
@@ -571,7 +578,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const nameHtml = `<div class="col-1">${name}</div>`;
         const occHtml = `<div class="col-2 ${getDiffClass(occupancyText, prevOcc, isNew)}">${occupancyText}</div>`;
-        const dynHtml = `<div class="col-3 ${getDiffClass(dynamicText, prevDyn, isNew)}">${dynamicText}</div>`;
+        const dynHtml = `<div class="col-3 ${dynColorClass} ${getDiffClass(dynamicText, prevDyn, isNew)}">${dynamicText}</div>`;
         const liHtml = `<div class="col-4 ${getDiffClass(liEstText, prevLi, isNew)}">${liEstText}</div>`;
         const stateHtml = `<div class="col-5 ${stateClass} ${getDiffClass(rezStatusText, prevRez, isNew)}">${rezStatusText}</div>`;
 
