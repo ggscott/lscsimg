@@ -516,7 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let memStateClass = '';
         const memMB_num = mem / (1024.0 * 1024.0);
         if (memMB_num > 10.0) memStateClass = 'val-bad';
-        else if (memMB_num > 7.0) memStateClass = 'val-warn';
+        else if (memMB_num > 8.0) memStateClass = 'val-warn';
 
         let cmplxStateClass = '';
         if (complexity > 500000) cmplxStateClass = 'val-bad';
