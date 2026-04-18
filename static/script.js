@@ -236,61 +236,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
             users.forEach(user => {
                 const category = user.category !== undefined ? user.category : 0;
-
                 if (category === 0) {
+                    user._sortName = (user.name || '').toLowerCase();
                     icUsers.push(user);
                 } else if (category === 1) {
+                    user._sortName = (user.display_name || user.name || '').toLowerCase();
                     oocUsers.push(user);
                 } else {
+                    user._sortName = (user.name || '').toLowerCase();
                     otherUsers.push(user);
                 }
             });
 
             // Sort each group alphabetically
-            const sortFnIC = (a, b) => {
-                let nameA = (a.name || '').toLowerCase();
-                let nameB = (b.name || '').toLowerCase();
-                if (nameA < nameB) return -1;
-                if (nameA > nameB) return 1;
+            const sortFn = (a, b) => {
+                if (a._sortName < b._sortName) return -1;
+                if (a._sortName > b._sortName) return 1;
                 return 0;
             };
 
-            const sortFnOOC = (a, b) => {
-                let nameA = (a.display_name || a.name || '').toLowerCase();
-                let nameB = (b.display_name || b.name || '').toLowerCase();
-                if (nameA < nameB) return -1;
-                if (nameA > nameB) return 1;
-                return 0;
-            };
-
-            icUsers.sort(sortFnIC);
-            oocUsers.sort(sortFnOOC);
-            otherUsers.sort(sortFnIC);
+            icUsers.sort(sortFn);
+            oocUsers.sort(sortFn);
+            otherUsers.sort(sortFn);
 
             newItems = [...icUsers, ...oocUsers, ...otherUsers];
         } else {
-            newItems = data.zones || [];
+            newItems = (data.zones || []).map(item => {
+                const isDyn = (item.isDynamic !== undefined ? item.isDynamic : ((item.dynamicText || 'Static').toLowerCase() !== 'static'));
+                const status = (item.rezStatusText || '').toLowerCase();
+                return {
+                    ...item,
+                    _isDyn: isDyn,
+                    _occ: parseInt(item.occupancyText) || 0,
+                    _isActiveDyn: isDyn && status !== 'idle' && status !== '',
+                    _statusLower: status,
+                    _sortName: (item.name || '').toLowerCase()
+                };
+            });
 
             // Sort by occupancy descending, then non-Idle dynamic zones, then alphabetically by name
             newItems.sort((a, b) => {
-                const occA = parseInt(a.occupancyText) || 0;
-                const occB = parseInt(b.occupancyText) || 0;
-
-                if (occA !== occB) {
-                    return occB - occA; // Descending
+                if (a._occ !== b._occ) {
+                    return b._occ - a._occ; // Descending
                 }
 
                 // If occupancy is the same (usually 0), check if it's dynamic and not Idle
-                const isActiveDynA = isActiveDynamic(a);
-                const isActiveDynB = isActiveDynamic(b);
+                if (a._isActiveDyn && !b._isActiveDyn) return -1;
+                if (!a._isActiveDyn && b._isActiveDyn) return 1;
 
-                if (isActiveDynA && !isActiveDynB) return -1;
-                if (!isActiveDynA && isActiveDynB) return 1;
-
-                let nameA = (a.name || '').toLowerCase();
-                let nameB = (b.name || '').toLowerCase();
-                if (nameA < nameB) return -1;
-                if (nameA > nameB) return 1;
+                if (a._sortName < b._sortName) return -1;
+                if (a._sortName > b._sortName) return 1;
                 return 0;
             });
         }
@@ -381,8 +376,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 rowEl.style.transform = `translateY(${index * rowHeightVH}vh)`;
                 updateSimRow(rowEl, item, prevItem, isNew);
             } else {
-                const occ = parseInt(item.occupancyText) || 0;
-                const isActiveDyn = isActiveDynamic(item);
+                const occ = item._occ;
+                const isActiveDyn = item._isActiveDyn;
 
                 rowEl.style.transform = 'none'; // remove translate transform
                 if (occ > 0 || isActiveDyn) {
@@ -553,7 +548,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dynamicText = item.dynamicText || "Static";
         const liEstText = item.liEstText || "-";
         const rezStatusText = item.rezStatusText || "-";
-        const isDynamic = item.isDynamic !== undefined ? item.isDynamic : (dynamicText.toLowerCase() !== 'static');
+        const isDynamic = (item._isDyn !== undefined) ? item._isDyn : (item.isDynamic !== undefined ? item.isDynamic : (dynamicText.toLowerCase() !== 'static'));
 
         let dynColorClass = '';
         if (dynamicText === "Missing") {
@@ -564,7 +559,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let stateClass = '';
         if (isDynamic) {
-            const statusLower = rezStatusText.toLowerCase();
+            const statusLower = item._statusLower !== undefined ? item._statusLower : rezStatusText.toLowerCase();
             if (statusLower === 'deployed' || statusLower === 'rezzing') stateClass = 'val-good';
             else if (statusLower === 'idle' || statusLower === 'derezzing') stateClass = 'val-ooc';
         } else {
