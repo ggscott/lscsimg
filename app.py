@@ -13,6 +13,8 @@ from contextlib import asynccontextmanager
 
 logger = logging.getLogger("uvicorn.error")
 
+# Pre-compile regex for performance
+SAFE_NAME_REGEX = re.compile(r'[^a-zA-Z0-9_\-]')
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -52,7 +54,7 @@ async def render(request: Request, payload: RenderRequest):
     render_type = payload.type
     primsHistory = payload.primsHistory
 
-    safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", regionName)
+    safe_name = SAFE_NAME_REGEX.sub('_', regionName)
     channel_name = f"region:{safe_name}:{render_type}"
     latest_key = f"latest:{safe_name}:{render_type}"
 
@@ -98,8 +100,8 @@ async def view_page(region_name: str, render_type: str):
 async def websocket_endpoint(websocket: WebSocket, region_name: str, render_type: str):
     await websocket.accept()
 
-    safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", region_name)
-    safe_type = re.sub(r"[^a-zA-Z0-9_\-]", "_", render_type)
+    safe_name = SAFE_NAME_REGEX.sub('_', region_name)
+    safe_type = SAFE_NAME_REGEX.sub('_', render_type)
     channel_name = f"region:{safe_name}:{safe_type}"
     latest_key = f"latest:{safe_name}:{safe_type}"
 
