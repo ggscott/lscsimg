@@ -238,12 +238,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const category = user.category !== undefined ? user.category : 0;
                 if (category === 0) {
                     user._sortName = (user.name || '').toLowerCase();
+                    user._isPinned = true;
                     icUsers.push(user);
                 } else if (category === 1) {
                     user._sortName = (user.display_name || user.name || '').toLowerCase();
+                    user._isPinned = false;
                     oocUsers.push(user);
                 } else {
                     user._sortName = (user.name || '').toLowerCase();
+                    user._isPinned = false;
                     otherUsers.push(user);
                 }
             });
@@ -372,8 +375,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (isSim) {
-                rowEl.style.position = 'absolute';
-                rowEl.style.transform = `translateY(${index * rowHeightVH}vh)`;
+                const isPinned = item._isPinned;
+                rowEl.style.transform = 'none'; // remove translate transform
+                if (isPinned) {
+                    rowEl.style.position = 'sticky';
+                    rowEl.style.top = `${index * rowHeightVH}vh`;
+                    rowEl.style.zIndex = '10'; // ensure sticky elements stay above scrolling ones
+                    rowEl.style.backgroundColor = 'var(--bg-color)'; // opaque background to hide scrolling elements underneath
+                } else {
+                    rowEl.style.position = 'relative';
+                    rowEl.style.top = 'auto';
+                    rowEl.style.zIndex = '1';
+                    rowEl.style.backgroundColor = 'transparent';
+                }
                 updateSimRow(rowEl, item, prevItem, isNew);
             } else {
                 const occ = item._occ;
@@ -397,9 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         currentState = newItems;
 
-        if (!isSim) {
-            startAutoScroll();
-        }
+        startAutoScroll();
     }
 
     function startAutoScroll() {
