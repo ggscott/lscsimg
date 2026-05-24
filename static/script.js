@@ -526,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (memMB_num > 8.0) memStateClass = 'val-warn';
 
         let cmplxStateClass = '';
-        if (complexity > 500000) cmplxStateClass = 'val-bad';
+        if (complexity >= 350000) cmplxStateClass = 'val-bad';
         else if (complexity > 200000) cmplxStateClass = 'val-warn';
 
         const scriptDiffClass = getDiffClass(paddedScriptsStr, prevScriptsText, isNew);
