@@ -421,8 +421,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        // Check if we actually need to scroll before cloning
+        const needsScroll = tableBody.scrollHeight > tableBody.clientHeight;
+        let isCloned = false;
+
         // Append cloned non-pinned items at the end to create a seamless scroll loop
-        if (nonPinnedItems.length > 0) {
+        if (needsScroll && nonPinnedItems.length > 0) {
+            isCloned = true;
             nonPinnedItems.forEach(item => {
                 const key = item._key;
                 const originalRowEl = document.getElementById(`row-${key}`);
@@ -442,10 +447,10 @@ document.addEventListener('DOMContentLoaded', () => {
         currentState = newItems;
         const totalPinned = newItems.length - nonPinnedItems.length;
 
-        startAutoScroll(totalPinned, nonPinnedItems.length);
+        startAutoScroll(totalPinned, nonPinnedItems.length, isCloned);
     }
 
-    function startAutoScroll(totalPinned, nonPinnedCount) {
+    function startAutoScroll(totalPinned, nonPinnedCount, isCloned) {
         if (scrollAnimationFrame) {
             cancelAnimationFrame(scrollAnimationFrame);
         }
@@ -454,8 +459,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const scrollSpeed = 0.5; // adjust for speed
 
         function scrollStep() {
-            // Only scroll if there are non-pinned items
-            if (nonPinnedCount > 0) {
+            // Only scroll if there are non-pinned items and they were cloned for scrolling
+            if (nonPinnedCount > 0 && isCloned) {
                 // The height of all original non-pinned items combined
                 // We use vh units for rows, so calculate total scroll height based on DOM bounds
                 // Or simply find the total height of nonPinnedCount items.
@@ -467,8 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const maxScroll = tableBody.scrollHeight - tableBody.clientHeight;
 
-                    // If maxScroll is smaller than the original height, it means the table
-                    // can fully fit on screen. Only animate if it overflows enough to loop.
+                    // Only animate if it overflows enough to loop.
                     if (maxScroll < originalNonPinnedHeight) {
                         return;
                     }
