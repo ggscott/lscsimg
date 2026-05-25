@@ -338,6 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
             newMap.set(key, item);
         });
 
+        // Clean up old rows that are no longer in newItems
         currentState.forEach(item => {
             const key = item.uuid || item.name;
             if (!newMap.has(key)) {
@@ -348,6 +349,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+
+        // Remove old clones before appending new ones
+        const oldClones = document.querySelectorAll('.clone-row');
+        oldClones.forEach(clone => clone.remove());
+
+        let nonPinnedItems = [];
 
         newItems.forEach((item, index) => {
             const key = item._key;
@@ -374,8 +381,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 tableBody.insertBefore(rowEl, tableBody.children[index]);
             }
 
+            let isPinned = false;
+
             if (isSim) {
-                const isPinned = item._isPinned;
+                isPinned = item._isPinned;
                 rowEl.style.transform = 'none'; // remove translate transform
                 if (isPinned) {
                     rowEl.style.position = 'sticky';
@@ -387,6 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     rowEl.style.top = 'auto';
                     rowEl.style.zIndex = '1';
                     rowEl.style.backgroundColor = 'transparent';
+                    nonPinnedItems.push(item);
                 }
                 updateSimRow(rowEl, item, prevItem, isNew);
             } else {
@@ -395,6 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 rowEl.style.transform = 'none'; // remove translate transform
                 if (occ > 0 || isActiveDyn) {
+                    isPinned = true;
                     rowEl.style.position = 'sticky';
                     rowEl.style.top = `${index * rowHeightVH}vh`;
                     rowEl.style.zIndex = '10'; // ensure sticky elements stay above scrolling ones
@@ -404,17 +415,37 @@ document.addEventListener('DOMContentLoaded', () => {
                     rowEl.style.top = 'auto';
                     rowEl.style.zIndex = '1';
                     rowEl.style.backgroundColor = 'transparent';
+                    nonPinnedItems.push(item);
                 }
                 updateZoneRow(rowEl, item, prevItem, isNew);
             }
         });
 
-        currentState = newItems;
+        // Append cloned non-pinned items at the end to create a seamless scroll loop
+        if (nonPinnedItems.length > 0) {
+            nonPinnedItems.forEach(item => {
+                const key = item._key;
+                const originalRowEl = document.getElementById(`row-${key}`);
+                if (originalRowEl) {
+                    const cloneEl = originalRowEl.cloneNode(true);
+                    cloneEl.id = `clone-${key}`;
+                    cloneEl.classList.add('clone-row');
+                    cloneEl.style.position = 'relative';
+                    cloneEl.style.top = 'auto';
+                    cloneEl.style.zIndex = '1';
+                    cloneEl.style.backgroundColor = 'transparent';
+                    tableBody.appendChild(cloneEl);
+                }
+            });
+        }
 
-        startAutoScroll();
+        currentState = newItems;
+        const totalPinned = newItems.length - nonPinnedItems.length;
+
+        startAutoScroll(totalPinned, nonPinnedItems.length);
     }
 
-    function startAutoScroll() {
+    function startAutoScroll(totalPinned, nonPinnedCount) {
         if (scrollAnimationFrame) {
             cancelAnimationFrame(scrollAnimationFrame);
         }
@@ -423,16 +454,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const scrollSpeed = 0.5; // adjust for speed
 
         function scrollStep() {
-            // max scrollable height
-            const maxScroll = tableBody.scrollHeight - tableBody.clientHeight;
+            // Only scroll if there are non-pinned items
+            if (nonPinnedCount > 0) {
+                // The height of all original non-pinned items combined
+                // We use vh units for rows, so calculate total scroll height based on DOM bounds
+                // Or simply find the total height of nonPinnedCount items.
+                // Assuming all rows are uniform height:
+                const firstNonPinned = tableBody.children[totalPinned];
+                if (firstNonPinned) {
+                    const rowHeight = firstNonPinned.offsetHeight;
+                    const originalNonPinnedHeight = rowHeight * nonPinnedCount;
 
-            if (maxScroll > 0) {
-                scrollPos += scrollSpeed;
-                if (scrollPos >= maxScroll) {
-                    // reset to top when reaching bottom
-                    scrollPos = 0;
+                    const maxScroll = tableBody.scrollHeight - tableBody.clientHeight;
+
+                    // If maxScroll is smaller than the original height, it means the table
+                    // can fully fit on screen. Only animate if it overflows enough to loop.
+                    if (maxScroll < originalNonPinnedHeight) {
+                        return;
+                    }
+
+                    if (maxScroll > 0) {
+                        scrollPos += scrollSpeed;
+
+                        // If we have scrolled exactly past the original non-pinned list,
+                        // reset to 0 to loop seamlessly to the cloned list.
+                        if (scrollPos >= originalNonPinnedHeight) {
+                            scrollPos -= originalNonPinnedHeight;
+                        }
+
+                        tableBody.scrollTop = scrollPos;
+                    }
                 }
-                tableBody.scrollTop = scrollPos;
             }
             scrollAnimationFrame = requestAnimationFrame(scrollStep);
         }
