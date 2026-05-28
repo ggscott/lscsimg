@@ -428,7 +428,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (maxScroll > 0) {
                 scrollPos += scrollSpeed;
-                if (scrollPos >= maxScroll) {
+                // Use a tolerance (e.g. 1px) to prevent Safari from bouncing/jumping due to subpixel rendering and elastic scrolling
+                if (scrollPos >= maxScroll || Math.ceil(tableBody.scrollTop) >= Math.floor(maxScroll)) {
                     // reset to top when reaching bottom
                     scrollPos = 0;
                 }
