@@ -324,6 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let scrollAnimationFrame = null;
+    let globalScrollPos = 0; // maintain scroll state across render updates
 
     function renderTable(newItems, isSim) {
         const currentMap = new Map();
@@ -419,7 +420,11 @@ document.addEventListener('DOMContentLoaded', () => {
             cancelAnimationFrame(scrollAnimationFrame);
         }
 
-        let scrollPos = tableBody.scrollTop;
+        // Only initialize from actual DOM on first run or if it got out of sync significantly
+        if (globalScrollPos === 0 || Math.abs(globalScrollPos - tableBody.scrollTop) > 50) {
+            globalScrollPos = tableBody.scrollTop;
+        }
+
         const scrollSpeed = 0.5; // adjust for speed
 
         function scrollStep() {
@@ -427,13 +432,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const maxScroll = tableBody.scrollHeight - tableBody.clientHeight;
 
             if (maxScroll > 0) {
-                scrollPos += scrollSpeed;
-                // Use a tolerance (e.g. 1px) to prevent Safari from bouncing/jumping due to subpixel rendering and elastic scrolling
-                if (scrollPos >= maxScroll || Math.ceil(tableBody.scrollTop) >= Math.floor(maxScroll)) {
-                    // reset to top when reaching bottom
-                    scrollPos = 0;
+                globalScrollPos += scrollSpeed;
+
+                // if we've scrolled past the maximum logical height, wrap around
+                if (globalScrollPos >= maxScroll) {
+                    globalScrollPos = 0;
                 }
-                tableBody.scrollTop = scrollPos;
+                tableBody.scrollTop = globalScrollPos;
             }
             scrollAnimationFrame = requestAnimationFrame(scrollStep);
         }
