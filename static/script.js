@@ -461,15 +461,21 @@ document.addEventListener('DOMContentLoaded', () => {
         function scrollStep() {
             // Only scroll if there are non-pinned items and they were cloned for scrolling
             if (nonPinnedCount > 0 && isCloned) {
-                // The height of all original non-pinned items combined
-                // We use vh units for rows, so calculate total scroll height based on DOM bounds
-                // Or simply find the total height of nonPinnedCount items.
-                // Assuming all rows are uniform height:
                 const firstNonPinned = tableBody.children[totalPinned];
-                if (firstNonPinned) {
-                    const rowHeight = firstNonPinned.offsetHeight;
-                    const originalNonPinnedHeight = rowHeight * nonPinnedCount;
+                const firstCloned = tableBody.querySelector('.clone-row');
 
+                if (firstNonPinned && firstCloned) {
+                    // Calculate exact pixel distance between the original and its clone to avoid
+                    // subpixel rounding errors on Safari when using offsetHeight * count
+                    const firstNonPinnedRect = firstNonPinned.getBoundingClientRect();
+                    const firstClonedRect = firstCloned.getBoundingClientRect();
+                    const exactNonPinnedHeight = firstClonedRect.top - firstNonPinnedRect.top;
+
+                    // Calculate fallback for Safari debug logging
+                    const rowHeight = firstNonPinned.offsetHeight;
+                    const oldCalcHeight = rowHeight * nonPinnedCount;
+
+                    const originalNonPinnedHeight = exactNonPinnedHeight > 0 ? exactNonPinnedHeight : oldCalcHeight;
                     const maxScroll = tableBody.scrollHeight - tableBody.clientHeight;
 
                     // Only animate if it overflows enough to loop.
@@ -483,7 +489,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         // If we have scrolled exactly past the original non-pinned list,
                         // reset to 0 to loop seamlessly to the cloned list.
                         if (scrollPos >= originalNonPinnedHeight) {
+                            console.log(`[Safari Debug] Auto-scroll looping.`);
+                            console.log(`  scrollPos before reset: ${scrollPos}`);
+                            console.log(`  originalNonPinnedHeight (exact): ${exactNonPinnedHeight}`);
+                            console.log(`  originalNonPinnedHeight (old calc): ${oldCalcHeight}`);
+                            console.log(`  maxScroll: ${maxScroll}`);
+                            console.log(`  tableBody.scrollTop before reset: ${tableBody.scrollTop}`);
+
                             scrollPos -= originalNonPinnedHeight;
+
+                            console.log(`  scrollPos after reset: ${scrollPos}`);
                         }
 
                         tableBody.scrollTop = scrollPos;
