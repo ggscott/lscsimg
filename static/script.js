@@ -482,11 +482,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     const firstClonedRect = firstCloned.getBoundingClientRect();
                     const exactNonPinnedHeight = firstClonedRect.top - firstNonPinnedRect.top;
 
-                    // Calculate fallback for Safari debug logging
+                    // Calculate fallback in case getBoundingClientRect fails
                     const rowHeight = firstNonPinned.offsetHeight;
-                    const oldCalcHeight = rowHeight * nonPinnedCount;
+                    const fallbackHeight = rowHeight * nonPinnedCount;
 
-                    const originalNonPinnedHeight = exactNonPinnedHeight > 0 ? exactNonPinnedHeight : oldCalcHeight;
+                    const originalNonPinnedHeight = exactNonPinnedHeight > 0 ? exactNonPinnedHeight : fallbackHeight;
                     const maxScroll = tableBody.scrollHeight - tableBody.clientHeight;
 
                     // Only animate if it overflows enough to loop.
@@ -500,16 +500,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         // If we have scrolled exactly past the original non-pinned list,
                         // reset to 0 to loop seamlessly to the cloned list.
                         if (scrollPos >= originalNonPinnedHeight) {
-                            console.log(`[Safari Debug] Auto-scroll looping.`);
-                            console.log(`  scrollPos before reset: ${scrollPos}`);
-                            console.log(`  originalNonPinnedHeight (exact): ${exactNonPinnedHeight}`);
-                            console.log(`  originalNonPinnedHeight (old calc): ${oldCalcHeight}`);
-                            console.log(`  maxScroll: ${maxScroll}`);
-                            console.log(`  tableBody.scrollTop before reset: ${tableBody.scrollTop}`);
-
                             scrollPos -= originalNonPinnedHeight;
-
-                            console.log(`  scrollPos after reset: ${scrollPos}`);
                         }
 
                         tableBody.scrollTop = scrollPos;
