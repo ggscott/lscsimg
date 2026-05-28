@@ -350,6 +350,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        // Before we remove clones, which drastically shrinks the scrollHeight,
+        // we must save the current exact scroll position. Safari is very aggressive
+        // and if it sees the scrollbar is 'out of bounds' (e.g. we were scrolling in the clones),
+        // it will instantly snap the scrollbar back to the top of the original list,
+        // causing the visual bouncing bug.
+        const previousScrollTop = tableBody.scrollTop;
+
         // Remove old clones before appending new ones
         const oldClones = document.querySelectorAll('.clone-row');
         oldClones.forEach(clone => clone.remove());
@@ -444,18 +451,22 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // Now that the DOM is fully reconstructed with new items and clones,
+        // restore the scroll position immediately so Safari doesn't permanently snap us.
+        tableBody.scrollTop = previousScrollTop;
+
         currentState = newItems;
         const totalPinned = newItems.length - nonPinnedItems.length;
 
-        startAutoScroll(totalPinned, nonPinnedItems.length, isCloned);
+        startAutoScroll(totalPinned, nonPinnedItems.length, isCloned, previousScrollTop);
     }
 
-    function startAutoScroll(totalPinned, nonPinnedCount, isCloned) {
+    function startAutoScroll(totalPinned, nonPinnedCount, isCloned, startingScrollPos) {
         if (scrollAnimationFrame) {
             cancelAnimationFrame(scrollAnimationFrame);
         }
 
-        let scrollPos = tableBody.scrollTop;
+        let scrollPos = startingScrollPos !== undefined ? startingScrollPos : tableBody.scrollTop;
         const scrollSpeed = 0.5; // adjust for speed
 
         function scrollStep() {
