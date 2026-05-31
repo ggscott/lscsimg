@@ -302,7 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const agents = data.agents || 0;
 
             // Adjust margins/height based on roleplayers
-            if (agents > 17) {
+            if (agents >= 16) {
                 currentRowHeightVH = 4;
                 document.documentElement.style.setProperty('--row-height', '4vh');
                 document.documentElement.style.setProperty('--row-padding', '0.5vh 0');

@@ -124,8 +124,10 @@ body, html {
     font-weight: 700;
     color: var(--accent-cyan);
     border-bottom: 2px solid var(--accent-cyan);
-    padding-bottom: 1vh;
-    margin-bottom: 1vh;
+    padding-bottom: 0;
+    margin-bottom: 0;
+
+
 }
 
 .table-body {
