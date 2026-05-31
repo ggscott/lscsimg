@@ -10,6 +10,8 @@
     --accent-red: #ff3b30;
     --border-color: #3c4650;
     --row-bg: rgba(60, 70, 80, 0.1);
+    --row-height: 6vh;
+    --row-padding: 1.5vh 0;
 }
 
 * {
@@ -141,12 +143,12 @@ body, html {
 .row {
     display: flex;
     font-size: 2vh;
-    padding: 1.5vh 0;
+    padding: var(--row-padding);
     border-bottom: 1px solid var(--border-color);
     align-items: center;
     position: absolute;
     width: 100%;
-    height: 6vh;
+    height: var(--row-height);
     transition: transform 0.5s ease;
     background-color: var(--bg-color);
 }

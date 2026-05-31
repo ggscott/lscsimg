@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let currentState = [];
-    const rowHeightVH = 6; // height of each row in vh
+    let currentRowHeightVH = 6; // height of each row in vh, dynamic
 
     function connectWebSocket() {
         const ws = new WebSocket(wsUrl);
@@ -300,6 +300,18 @@ document.addEventListener('DOMContentLoaded', () => {
         let statsHtml = '';
         if (isSim) {
             const agents = data.agents || 0;
+
+            // Adjust margins/height based on roleplayers
+            if (agents > 17) {
+                currentRowHeightVH = 4;
+                document.documentElement.style.setProperty('--row-height', '4vh');
+                document.documentElement.style.setProperty('--row-padding', '0.5vh 0');
+            } else {
+                currentRowHeightVH = 6;
+                document.documentElement.style.setProperty('--row-height', '6vh');
+                document.documentElement.style.setProperty('--row-padding', '1.5vh 0');
+            }
+
             const fps = data.fps || 0.0;
             const dilation = data.dilation || 0.0;
             const lag = data.lag || 0;
@@ -395,7 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 rowEl.style.transform = 'none'; // remove translate transform
                 if (isPinned) {
                     rowEl.style.position = 'sticky';
-                    rowEl.style.top = `${index * rowHeightVH}vh`;
+                    rowEl.style.top = `${index * currentRowHeightVH}vh`;
                     rowEl.style.zIndex = '10'; // ensure sticky elements stay above scrolling ones
                     rowEl.style.backgroundColor = 'var(--bg-color)'; // opaque background to hide scrolling elements underneath
                 } else {
@@ -414,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (occ > 0 || isActiveDyn) {
                     isPinned = true;
                     rowEl.style.position = 'sticky';
-                    rowEl.style.top = `${index * rowHeightVH}vh`;
+                    rowEl.style.top = `${index * currentRowHeightVH}vh`;
                     rowEl.style.zIndex = '10'; // ensure sticky elements stay above scrolling ones
                     rowEl.style.backgroundColor = 'var(--bg-color)'; // opaque background to hide scrolling elements underneath
                 } else {
