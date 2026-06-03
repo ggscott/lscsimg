@@ -18,8 +18,23 @@ SAFE_NAME_REGEX = re.compile(r'[^a-zA-Z0-9_\-]')
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Start Redis keepalive task
+    task = asyncio.create_task(redis_keepalive())
     yield
+    # Cancel the task when the app is shutting down
+    task.cancel()
 
+
+async def redis_keepalive():
+    """Periodically ping Redis to keep the connection alive and verify health."""
+    while True:
+        try:
+            await asyncio.sleep(300)  # Ping every 5 minutes
+            await redis_client.ping()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Redis keepalive ping failed: {e}")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -136,6 +151,11 @@ async def websocket_endpoint(websocket: WebSocket, region_name: str, render_type
             await websocket.receive()
     except WebSocketDisconnect:
         logger.info(f"Client disconnected from {channel_name}")
+    except RuntimeError as e:
+        if "Cannot call \"receive\" once a disconnect message has been received" in str(e):
+            logger.info(f"Client cleanly disconnected from {channel_name} (RuntimeError)")
+        else:
+            logger.error(f"WebSocket RuntimeError: {e}")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
     finally:

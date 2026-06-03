@@ -76,6 +76,21 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentState = [];
     let currentRowHeightVH = 6; // height of each row in vh, dynamic
 
+    let watchdogTimer = null;
+
+    function resetWatchdog(ws) {
+        if (watchdogTimer) {
+            clearTimeout(watchdogTimer);
+        }
+        // If no message is received for 60 seconds, force close the websocket to trigger reconnect
+        watchdogTimer = setTimeout(() => {
+            console.log('Watchdog timeout: No data received for 60 seconds. Forcing reconnect...');
+            if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
+                ws.close();
+            }
+        }, 60000);
+    }
+
     function connectWebSocket() {
         const ws = new WebSocket(wsUrl);
 
@@ -83,9 +98,11 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Connected to WebSocket');
             overlay.style.opacity = '0';
             setTimeout(() => overlay.style.display = 'none', 500);
+            resetWatchdog(ws);
         };
 
         ws.onmessage = (event) => {
+            resetWatchdog(ws);
             try {
                 const payload = JSON.parse(event.data);
                 handleData(payload);
@@ -95,6 +112,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         ws.onclose = () => {
+            if (watchdogTimer) {
+                clearTimeout(watchdogTimer);
+            }
             console.log('WebSocket disconnected. Reconnecting in 2s...');
             overlay.style.display = 'flex';
             overlay.style.opacity = '1';
