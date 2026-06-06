@@ -78,6 +78,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let watchdogTimer = null;
 
+    // EMA variables for stats smoothing
+    const EMA_ALPHA = 0.2;
+    let smoothedFps = null;
+    let smoothedDilation = null;
+    let smoothedLag = null;
+
     function resetWatchdog(ws) {
         if (watchdogTimer) {
             clearTimeout(watchdogTimer);
@@ -336,13 +342,24 @@ document.addEventListener('DOMContentLoaded', () => {
             const dilation = data.dilation || 0.0;
             const lag = data.lag || 0;
 
-            let lagClass = lag > 10 ? 'val-bad' : '';
+            if (smoothedFps === null) {
+                smoothedFps = fps;
+                smoothedDilation = dilation;
+                smoothedLag = lag;
+            } else {
+                smoothedFps = (EMA_ALPHA * fps) + ((1 - EMA_ALPHA) * smoothedFps);
+                smoothedDilation = (EMA_ALPHA * dilation) + ((1 - EMA_ALPHA) * smoothedDilation);
+                smoothedLag = (EMA_ALPHA * lag) + ((1 - EMA_ALPHA) * smoothedLag);
+            }
+
+            const displayLag = Math.round(smoothedLag);
+            let lagClass = displayLag > 10 ? 'val-bad' : '';
 
             statsHtml = `
                 <div class="stat-box"><span class="stat-label">Roleplayers</span><span class="stat-value">${agents}</span></div>
-                <div class="stat-box"><span class="stat-label">FPS</span><span class="stat-value">${fps.toFixed(1)}</span></div>
-                <div class="stat-box"><span class="stat-label">Time Dilation</span><span class="stat-value">${dilation.toFixed(2)}</span></div>
-                <div class="stat-box"><span class="stat-label">Lag</span><span class="stat-value ${lagClass}">${lag} %</span></div>
+                <div class="stat-box"><span class="stat-label">FPS</span><span class="stat-value">${smoothedFps.toFixed(1)}</span></div>
+                <div class="stat-box"><span class="stat-label">Time Dilation</span><span class="stat-value">${smoothedDilation.toFixed(2)}</span></div>
+                <div class="stat-box"><span class="stat-label">Lag</span><span class="stat-value ${lagClass}">${displayLag} %</span></div>
             `;
         } else {
             const remainingPrims = data.remaining_prims || 0;
