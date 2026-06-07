@@ -410,6 +410,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const oldClones = document.querySelectorAll('.clone-row');
         oldClones.forEach(clone => clone.remove());
 
+        // Pre-calculate if pinned items would exceed the container height
+        let intendedPinnedCount = 0;
+        newItems.forEach(item => {
+            if (isSim) {
+                if (item._isPinned) intendedPinnedCount++;
+            } else {
+                if (item._occ > 0 || item._isActiveDyn) intendedPinnedCount++;
+            }
+        });
+
+        const rowHeightPx = (currentRowHeightVH * window.innerHeight) / 100;
+        const totalPinnedHeightPx = intendedPinnedCount * rowHeightPx;
+        const disableAllPinning = totalPinnedHeightPx > tableBody.clientHeight;
+
         let nonPinnedItems = [];
 
         newItems.forEach((item, index) => {
@@ -440,7 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let isPinned = false;
 
             if (isSim) {
-                isPinned = item._isPinned;
+                isPinned = !disableAllPinning && item._isPinned;
                 rowEl.style.transform = 'none'; // remove translate transform
                 if (isPinned) {
                     rowEl.style.position = 'sticky';
@@ -459,9 +473,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const occ = item._occ;
                 const isActiveDyn = item._isActiveDyn;
 
+                isPinned = !disableAllPinning && (occ > 0 || isActiveDyn);
+
                 rowEl.style.transform = 'none'; // remove translate transform
-                if (occ > 0 || isActiveDyn) {
-                    isPinned = true;
+                if (isPinned) {
                     rowEl.style.position = 'sticky';
                     rowEl.style.top = `${index * currentRowHeightVH}vh`;
                     rowEl.style.zIndex = '10'; // ensure sticky elements stay above scrolling ones
