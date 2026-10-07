@@ -492,8 +492,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Check if we actually need to scroll before cloning
-        const needsScroll = tableBody.scrollHeight > tableBody.clientHeight;
+        // Base this on the rows in the current data, not scrollHeight: Safari can
+        // include sticky or fading-out rows in that value and trigger extra clones.
+        const needsScroll = newItems.length * rowHeightPx > tableBody.clientHeight;
         let isCloned = false;
 
         // Append cloned non-pinned items at the end to create a seamless scroll loop
